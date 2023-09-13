@@ -3,6 +3,7 @@ import openai
 import json
 import narrative
 import quest
+import knowledge_graph
 
 messages = []
 quests = []
@@ -98,7 +99,7 @@ def convert_quest(quest_structure: str):
     return new_quest
 
 
-if __name__ == '__main__':
+def main():
     # gives the LLM the prompt (narrative, structure, instructions, etc.):
     prompt()
     first_response = get_response()
@@ -111,12 +112,19 @@ if __name__ == '__main__':
     # ...
     gen_quest = generate_quest(user_request)
     # validate generated quest:
-    # ...
-    print(gen_quest)
-    # translate generated quest into an actual playable quest:
-    gen = convert_quest(gen_quest) # conversion into an quest object functions (if key values have double quotes)
-    #gen.debug_quest()
+    kg = knowledge_graph.KnowledgeGraph("42")
+    if kg.validate_quest(gen_quest):
+        print(gen_quest)
+        # translate generated quest into an actual playable quest:
+        gen = convert_quest(gen_quest)  # conversion into an quest object functions (if key values have double quotes)
+        # gen.debug_quest()
+    else:
+        print("Retry!")
+        # retry
 
+
+if __name__ == '__main__':
+    main()
 #def run_conversation(user_request):
 #    # Step 1: send the conversation and available functions to GPT
 #    messages.append(
