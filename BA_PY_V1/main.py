@@ -2,6 +2,7 @@ import os
 import openai
 import json
 import narrative
+import quest
 
 messages = []
 quests = []
@@ -25,6 +26,8 @@ data_structure = {
         "DialogueOptions": [{
             "NPC": "name of NPC",
             "Text": "text",
+            # responses? this way?
+            #"Response": "the player's possible responses",
             "DialogueID": "the dialogue\'s ID, like d_n, where d stands for dialogue and n is the unique number.",
             "PreviousDialog": "the ID of the previous dialogue that had to be played."
         }],
@@ -36,11 +39,13 @@ data_structure = {
 json_structure = json.dumps(data_structure, ensure_ascii=False).replace('"', r'\"')
 instructions = '''
 You are now a generator of video game quests for a role-playing game. Generate the quest only in the provided JSON 
-structure and only when explicitly requested to do so! Give the player the option to accept or decline a quest in the 
-dialogue. The NPC offering the quest should react according to the player's answer. The player character is a stranger 
-who arrives in the village and is not identical to any of the NPCs mentioned in the narrative. In the quest, exclusively 
-use NPCs, locations, items, and factions that are known to you from the given narrative and do not create new locations, 
-NPCs, items, or factions!'''
+structure! Generate the quest only when you're explicitly requested to do so! Give the player the option to accept or 
+decline a quest in the dialogue with an NPC. The NPC offering the quest should react according to the player's answer. 
+The player character is a stranger who arrives in the village and is not identical to any of the NPCs mentioned in the 
+narrative. In the quest, exclusively use NPCs, locations, items, and factions that are known to you from the given 
+narrative and do not create new locations, NPCs, items, or factions! If a value is null, for example if the task doesn't 
+have an NPC, then put in "null" as the value. Make sure to put the object keys of the JSON structure always in double 
+quotes as described in the given JSON structure'''
 command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
 
 
@@ -75,9 +80,22 @@ def get_response(response_temp=0.0):
 def generate_quest(quest_request: str):
     add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
     request_response = get_response(1.0)
-    quest = request_response["choices"][0]["message"]["content"]
-    quests.append(quest)
-    return quest
+    generated_quest = request_response["choices"][0]["message"]["content"]
+    quests.append(generated_quest)
+    return generated_quest
+
+
+def convert_quest(quest_structure: str):
+    # something's not correct yet...
+    json_quest = json.loads(f'{quest_structure}')
+    q_name = json_quest["Name"]
+    q_description = json_quest["Detailed_Description"]
+    q_s_description = json_quest["Short_Description"]
+    q_source = json_quest["Source"]
+    q_chrono = json_quest["Chronological"]
+    q_sub_tasks = json_quest["SubTasks"]
+    new_quest = quest.Quest(q_name, q_description, q_s_description, q_source, q_chrono, q_sub_tasks)
+    return new_quest
 
 
 if __name__ == '__main__':
@@ -96,9 +114,8 @@ if __name__ == '__main__':
     # ...
     print(gen_quest)
     # translate generated quest into an actual playable quest:
-    # ...
-
-
+    gen = convert_quest(gen_quest) # conversion into an quest object functions (if key values have double quotes)
+    #gen.debug_quest()
 
 #def run_conversation(user_request):
 #    # Step 1: send the conversation and available functions to GPT
