@@ -1,6 +1,6 @@
 class KnowledgeGraph:
     def __init__(self, key: str):
-        print("Who let the dogs out!")
+        #print("Who let the dogs out!")
         # access graph/stardog
         self.key = key
 
@@ -11,7 +11,7 @@ class KnowledgeGraph:
         print(new_knowledge)
 
     def validate_quest(self, quest):
-        print("Validation!")
+        #print("Validation!")
         # ask LLM?
         # check if nodes are accessible?
         if True:

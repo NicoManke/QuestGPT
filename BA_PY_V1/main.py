@@ -9,8 +9,9 @@ messages = []
 quests = []
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-model = "gpt-3.5-turbo-0613"
+model = "gpt-3.5-turbo-0613"  # "gpt-4"
 system_role = "system"
+user_role = "user"
 
 data_structure = {
     "Name": "name of quest",
@@ -27,13 +28,11 @@ data_structure = {
         "DialogueOptions": [{
             "NPC": "name of NPC",
             "Text": "text",
-            # responses? this way?
-            #"Response": "the player's possible responses",
             "DialogueID": "the dialogue\'s ID, like d_n, where d stands for dialogue and n is the unique number.",
             "PreviousDialog": "the ID of the previous dialogue that had to be played."
         }],
         "Task_Consequences": [{
-            "Description": "explaining the changes and consequences for the game world"
+            "Description": "explaining the changes and consequences for the game world after completing the task."
         }]
     }]
 }
@@ -47,7 +46,7 @@ narrative. In the quest, exclusively use NPCs, locations, items, and factions th
 narrative and do not create new locations, NPCs, items, or factions! If a value is null, for example if the task doesn't 
 have an NPC, then put in "null" as the value. Make sure to put the object keys of the JSON structure always in double 
 quotes as described in the given JSON structure'''
-command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
+command = '''From now on only generate quests if the system or the user explicitly requests you to do so!'''
 
 
 def prompt():
@@ -125,7 +124,9 @@ def main():
 
 if __name__ == '__main__':
     main()
-#def run_conversation(user_request):
+
+
+# def run_conversation(user_request):
 #    # Step 1: send the conversation and available functions to GPT
 #    messages.append(
 #        {"role": "user",
