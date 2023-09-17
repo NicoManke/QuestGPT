@@ -69,7 +69,24 @@ have an NPC, then put in "null" as the value. Make sure to put the object keys o
 quotes as described in the given JSON structure.'''
 command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
 
-node_types = {"", "", ""} # node graph node types here
+node_types = "Dragon, Location, Forest, Wolves"  # node graph node types here; currently just random examples
+
+
+def add_message(message: str, role: str = "user"):
+    messages.append(
+        {"role": role,
+         "content": message}
+    )
+
+
+def get_response(response_temp=0.0):
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=messages,
+        temperature=response_temp,
+    )
+    messages.append(response["choices"][0]["message"])
+    return response
 
 
 def prompt():
@@ -83,7 +100,8 @@ def prompt():
     add_message(command, system_role)
 
 
-def decide_node_types(request: str):
+def get_graph_knowledge(request: str):
+    msgs = []
     query_nodes_function = [{
         "name": "query_nodes",
         "description": "Queries the nodes from a knowledge graph based on given node types.",
@@ -98,11 +116,10 @@ def decide_node_types(request: str):
         }
     }]
 
-    msgs = []
     msgs.append(
         {"role": system_role,
          "content":
-             "Here is a list of all node types contained in our knowledge graph: {Dragon, Location, Forest, Wolves}"}
+             f"Here is a list of all node types contained in our knowledge graph: {node_types}"}
     )
     msgs.append(
         {"role": system_role,
@@ -165,23 +182,6 @@ def query_nodes(required_nodes: []):
     return ["Smaug"]
 
 
-def add_message(message: str, role: str = "user"):
-    messages.append(
-        {"role": role,
-         "content": message}
-    )
-
-
-def get_response(response_temp=0.0):
-    response = openai.ChatCompletion.create(
-        model=model,
-        messages=messages,
-        temperature=response_temp,
-    )
-    messages.append(response["choices"][0]["message"])
-    return response
-
-
 def generate_quest(quest_request: str, extracted_nodes):
     add_message(f"Build the quest's story around these given graph nodes extracted from the narrative: {extracted_nodes}")
     add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
@@ -214,7 +214,7 @@ def main():
     # -> I want to explore a dungeon.
     # -> I want to kill a dragon.
     # get knowledge from graph:
-    extracted_nodes = decide_node_types(user_request)
+    extracted_nodes = get_graph_knowledge(user_request)
     print(f"Extracted Nodes: {extracted_nodes}\n")
 
     gen_quest = generate_quest(user_request, extracted_nodes)
