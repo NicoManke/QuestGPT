@@ -4,6 +4,7 @@ import json
 import quest
 import knowledge_graph
 
+node_messages = []
 messages = []
 quests = []
 
@@ -68,6 +69,8 @@ have an NPC, then put in "null" as the value. Make sure to put the object keys o
 quotes as described in the given JSON structure.'''
 command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
 
+node_types = {"", "", ""} # node graph node types here
+
 
 def prompt():
     # add quest structure
@@ -78,6 +81,88 @@ def prompt():
     add_message(instructions, system_role)
     # make response only on request
     add_message(command, system_role)
+
+
+def decide_node_types(request: str):
+    query_nodes_function = [{
+        "name": "query_nodes",
+        "description": "Queries the nodes from a knowledge graph based on given node types.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "required_nodes": {
+                    "type": "string",
+                    "description": "An array of strings naming the node types of which instances should be queried from a knowledge graph.",
+                }
+            }, "required": ["required_nodes"],
+        }
+    }]
+
+    msgs = []
+    msgs.append(
+        {"role": system_role,
+         "content":
+             "Here is a list of all node types contained in our knowledge graph: {Dragon, Location, Forest, Wolves}"}
+    )
+    msgs.append(
+        {"role": system_role,
+         "content":
+             f"Decide which of the given node types need to be queried based of the following user request: {request}"}
+    )
+
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=msgs,
+        functions=query_nodes_function,
+        function_call={"name": "query_nodes"},
+    )
+    response_message = response["choices"][0]["message"]
+    print(f"Function Call: {response_message}")
+
+    # Step 2: check if GPT wanted to call a function
+    if response_message.get("function_call"):
+        # Step 3: call the function
+        # Note: the JSON response may not always be valid; be sure to handle errors
+        available_functions = {
+            "query_nodes": query_nodes,
+        }  # only one function in this example, but you can have multiple
+        function_name = response_message["function_call"]["name"]
+        function_to_call = available_functions[function_name]
+        function_args = json.loads(response_message["function_call"]["arguments"])
+        print(f"Args: {function_args}")
+        # this is the output of the actual function
+        queried_nodes = function_to_call(
+            required_nodes=function_args.get("required_nodes"),
+        )
+
+        ## OPTIONAL!!
+        ## Step 4: send the info on the function call and function response to GPT
+        #msgs.append(response_message)  # extend conversation with assistant's reply
+        #msgs.append(
+        #    {
+        #        "role": "function",
+        #        "name": function_name,
+        #        # output of the actual function gets fed back to generate a response in natural language
+        #        "content": f"Here are the queried nodes: {queried_nodes}",
+        #    }
+        #)
+        ## here an additional message could be integrated/added
+        #second_response = openai.ChatCompletion.create(
+        #    model=model,
+        #    messages=msgs,
+        #)  # get a new response from GPT where it can see the function response
+        #
+        #return second_response
+        return queried_nodes
+
+
+def query_nodes(required_nodes: []):
+    # do multiple KG API queries to get all required nodes
+    # ...
+    # let's say the player asks for a dragon fight, then "Smaug" or his identifier should be part of the queries output. But which data type?
+    # How should the Node output look like or how DOES it look like?
+    # ["", ""] seems not to work... -> dictionary or json.loads(...) ?!
+    return ["Smaug"]
 
 
 def add_message(message: str, role: str = "user"):
@@ -97,7 +182,8 @@ def get_response(response_temp=0.0):
     return response
 
 
-def generate_quest(quest_request: str):
+def generate_quest(quest_request: str, extracted_nodes):
+    add_message(f"Build the quest's story around these given graph nodes extracted from the narrative: {extracted_nodes}")
     add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
     request_response = get_response(1.0)
     generated_quest = request_response["choices"][0]["message"]["content"]
@@ -128,8 +214,10 @@ def main():
     # -> I want to explore a dungeon.
     # -> I want to kill a dragon.
     # get knowledge from graph:
-    # ...
-    gen_quest = generate_quest(user_request)
+    extracted_nodes = decide_node_types(user_request)
+    print(f"Extracted Nodes: {extracted_nodes}\n")
+
+    gen_quest = generate_quest(user_request, extracted_nodes)
     # validate generated quest:
     kg = knowledge_graph.KnowledgeGraph("42")
     if kg.validate_quest(gen_quest):
