@@ -219,21 +219,97 @@ def is_quest_valid(quest_structure: str):
 
 def generate_consequence(task_consequence_description: str):
     # function call for interpreting the abstract task consequence description
-    # ...
-    consequence_structure = task_consequence_description  # instead use a function call to proper convert it
-    consequences.append(convert_consequence(consequence_structure))
+    cons_types = ["spawn_new_object",
+                  "move_object",
+                  "remove_object",
+                  "change_parameter",
+                  "change_state",
+                  "play_sequence"]
+
+    msgs = []
+    convert_consequence_function = [{
+        "name": "convert_consequence",
+        "description": "Converts...",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "A description of the consequence and its influences on the game world.",
+                },
+                "type": {
+                    "type": "string",
+                    "description": "The which the consequence can be assigned to.",
+                },
+                "object": {
+                    "type": "string",
+                    "description": "The reference to the object on which the consequence is performed.",
+                },
+                "param": {
+                    "type": "string",
+                    "description": "The parameter of the object that will be changed as part of the consequence.",
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The new value for the param property.",
+                }
+            },
+            "required": ["description", "type", "object", "param", "value"],
+        }
+    }]
+
+    msgs.append(
+        {"role": system_role,
+         "content":
+             f"Decide which of the given types fits the upcoming description for a consequence the most. The types: {cons_types}"}
+    )
+    msgs.append(
+        {"role": system_role,
+         "content":
+             f"Here is the description of the consequence: {task_consequence_description}"}
+    )
+    msgs.append(
+        {"role": system_role,
+         "content":
+             f"For the description parameter just use the given description."}
+    )
+    msgs.append(
+        {"role": system_role,
+         "content":
+             "And decide what objects needs its parameter changed to a new value."}
+    )
+
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=msgs,
+        functions=convert_consequence_function,
+        function_call={"name": "convert_consequence"},
+    )
+    response_message = response["choices"][0]["message"]
+
+    if response_message.get("function_call"):
+        available_functions = {
+            "convert_consequence": convert_consequence,
+        }
+        function_name = response_message["function_call"]["name"]
+        function_to_call = available_functions[function_name]
+        function_args = json.loads(response_message["function_call"]["arguments"])
+
+        new_consequence = function_to_call(
+            description=task_consequence_description,
+            type=function_args.get("type"),
+            object=function_args.get("object"),
+            param=function_args.get("param"),
+            value=function_args.get("value"),
+        )
+        new_consequence.trigger()  # debug!
+        consequences.append(new_consequence)
+    else:
+        consequences.append(convert_consequence(f"Failed to generate: {task_consequence_description}"))
 
 
-def convert_consequence(consequence_structure: str):  # can this simply take the args of the function call?
-    # do function call for getting parameters
-    # cons = json.loads("output for consequence from function call")
-    # c_type = cons["Type"]
-    # c_object_ref = cons["Object"]
-    # c_param = cons["Param"]
-    # c_value = cons["Value"]
-    new_consequence = consequence.Consequence(consequence_structure)
-    # new_consequence = consequence.Consequence(...)
-    # return new_consequence
+def convert_consequence(description, type, object, param, value):
+    new_consequence = consequence.Consequence(description, type, object, param, value)
     return new_consequence
 
 
