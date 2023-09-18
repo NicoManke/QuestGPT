@@ -2,11 +2,13 @@ import os
 import openai
 import json
 import quest
+import consequence
 import knowledge_graph
 
 node_messages = []
 messages = []
 quests = []
+consequences = []
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 model = "gpt-3.5-turbo-0613"  # "gpt-4"
@@ -191,6 +193,50 @@ def generate_quest(quest_request: str, extracted_nodes):
     return generated_quest
 
 
+def is_quest_valid(quest_structure: str):
+    json_quest = json.loads(f'{quest_structure}')
+    print(f"JSON Quest:\n{json_quest}")
+    q_source = json_quest["Source"]
+    # does our source know every referenced object?
+    # ...
+    q_sub_tasks = json_quest["SubTasks"]
+    # print(f"Subtasks:\n{q_sub_tasks}")
+    i = 1
+    for task in q_sub_tasks:
+        print(f"Task {i}:\n{task}")
+        task_consequence = task["Task_Consequences"]
+        generate_consequence(task_consequence)
+        i = i + 1
+        # query validity
+        # how exactly
+        # 1. does the NPC knows everything he talks about?
+        # 2. is the objective (doable) in the named location
+        # 3. is the description valid -> function call? -> use task_consequence = task["Task_Consequences"]
+        # ...
+    kg = knowledge_graph.KnowledgeGraph("42")
+    return kg.validate_quest(quest_structure)
+
+
+def generate_consequence(task_consequence_description: str):
+    # function call for interpreting the abstract task consequence description
+    # ...
+    consequence_structure = task_consequence_description  # instead use a function call to proper convert it
+    consequences.append(convert_consequence(consequence_structure))
+
+
+def convert_consequence(consequence_structure: str):  # can this simply take the args of the function call?
+    # do function call for getting parameters
+    # cons = json.loads("output for consequence from function call")
+    # c_type = cons["Type"]
+    # c_object_ref = cons["Object"]
+    # c_param = cons["Param"]
+    # c_value = cons["Value"]
+    new_consequence = consequence.Consequence(consequence_structure)
+    # new_consequence = consequence.Consequence(...)
+    # return new_consequence
+    return new_consequence
+
+
 def convert_quest(quest_structure: str):
     # something's not correct yet...
     json_quest = json.loads(f'{quest_structure}')
@@ -219,15 +265,10 @@ def main():
 
     gen_quest = generate_quest(user_request, extracted_nodes)
     # validate generated quest:
-    kg = knowledge_graph.KnowledgeGraph("42")
-    if kg.validate_quest(gen_quest):
-        print(gen_quest)
-        # translate generated quest into an actual playable quest:
-        gen = convert_quest(gen_quest)  # conversion into an quest object functions (if key values have double quotes)
-        # gen.debug_quest()
+    if is_quest_valid(gen_quest):
+        gen = convert_quest(gen_quest)
     else:
-        print("Retry!")
-        # retry
+        print("The Quest wasn't valid, please try again.")
 
 
 if __name__ == '__main__':
