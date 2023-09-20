@@ -4,11 +4,14 @@ import json
 import quest
 import consequence
 import knowledge_graph
+import blazegraph
 
 node_messages = []
 messages = []
 quests = []
 consequences = []
+
+server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 model = "gpt-3.5-turbo-0613"  # "gpt-4"
@@ -327,6 +330,13 @@ def convert_quest(quest_structure: str):
 
 
 def main():
+    try:
+        bg = blazegraph.BlazeGraph(server_address)
+    except Exception as e:
+        print(e)
+    else:
+        bg.check()
+
     # gives the LLM the prompt (narrative, structure, instructions, etc.):
     prompt()
     first_response = get_response()
