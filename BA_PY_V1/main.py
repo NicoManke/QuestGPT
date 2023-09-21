@@ -74,7 +74,7 @@ have an NPC, then put in "null" as the value. Make sure to put the object keys o
 quotes as described in the given JSON structure.'''
 command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
 
-node_types = "Dragon, Location, Forest, Wolves"  # node graph node types here; currently just random examples
+node_types = "Dragon, Location, Person"  # node graph node types here; currently just random examples
 
 
 def add_message(message: str, role: str = "user"):
@@ -336,6 +336,9 @@ def main():
         print(e)
     else:
         bg.check()
+
+    # exhausted API key...
+    # return 0
 
     # gives the LLM the prompt (narrative, structure, instructions, etc.):
     prompt()
