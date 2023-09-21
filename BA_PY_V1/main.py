@@ -4,13 +4,16 @@ import json
 import quest
 import consequence
 import knowledge_graph
+import blazegraph
 
 node_messages = []
 messages = []
 quests = []
 consequences = []
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
+
+openai.api_key = os.getenv("OPENAI_API_KEY_2")
 model = "gpt-3.5-turbo-0613"  # "gpt-4"
 system_role = "system"
 user_role = "user"
@@ -71,7 +74,7 @@ have an NPC, then put in "null" as the value. Make sure to put the object keys o
 quotes as described in the given JSON structure.'''
 command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
 
-node_types = "Dragon, Location, Forest, Wolves"  # node graph node types here; currently just random examples
+node_types = "Dragon, Location, Person"  # node graph node types here; currently just random examples
 
 
 def add_message(message: str, role: str = "user"):
@@ -201,12 +204,14 @@ def is_quest_valid(quest_structure: str):
     # ...
     q_sub_tasks = json_quest["SubTasks"]
     # print(f"Subtasks:\n{q_sub_tasks}")
-    i = 1
-    for task in q_sub_tasks:
-        print(f"Task {i}:\n{task}")
-        task_consequence = task["Task_Consequences"]
-        generate_consequence(task_consequence)
-        i = i + 1
+
+    # paused until the vAudience Key is available again
+    #i = 1
+    #for task in q_sub_tasks:
+    #    print(f"Task {i}:\n{task}")
+    #    task_consequence = task["Task_Consequences"]
+    #    generate_consequence(task_consequence)
+    #    i = i + 1
         # query validity
         # how exactly
         # 1. does the NPC knows everything he talks about?
@@ -327,6 +332,16 @@ def convert_quest(quest_structure: str):
 
 
 def main():
+    try:
+        bg = blazegraph.BlazeGraph(server_address)
+    except Exception as e:
+        print(e)
+    else:
+        bg.check()
+
+    # exhausted API key...
+    # return 0
+
     # gives the LLM the prompt (narrative, structure, instructions, etc.):
     prompt()
     first_response = get_response()
