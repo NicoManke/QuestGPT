@@ -13,7 +13,7 @@ consequences = []
 
 server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("OPENAI_API_KEY_2")
 model = "gpt-3.5-turbo-0613"  # "gpt-4"
 system_role = "system"
 user_role = "user"
