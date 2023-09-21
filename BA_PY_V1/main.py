@@ -204,12 +204,14 @@ def is_quest_valid(quest_structure: str):
     # ...
     q_sub_tasks = json_quest["SubTasks"]
     # print(f"Subtasks:\n{q_sub_tasks}")
-    i = 1
-    for task in q_sub_tasks:
-        print(f"Task {i}:\n{task}")
-        task_consequence = task["Task_Consequences"]
-        generate_consequence(task_consequence)
-        i = i + 1
+
+    # paused until the vAudience Key is available again
+    #i = 1
+    #for task in q_sub_tasks:
+    #    print(f"Task {i}:\n{task}")
+    #    task_consequence = task["Task_Consequences"]
+    #    generate_consequence(task_consequence)
+    #    i = i + 1
         # query validity
         # how exactly
         # 1. does the NPC knows everything he talks about?
