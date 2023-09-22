@@ -4,8 +4,12 @@ from pymantic import sparql
 class BlazeGraph:
     def __init__(self, server_address: str):
         # server_address = ('http://192.168.2.100:9999/blazegraph/namespace/kb/sparql')
-        self.server = sparql.SPARQLServer(server_address)
-        self.server.update('LOAD <file:///D:/Bachelor/Blazegraph/files/Eich-Generated.ttl>')
+        try:
+            self.server = sparql.SPARQLServer(server_address)
+        except Exception as e:
+            print(f"Error: {e}")
+        else:
+            self.server.update('LOAD <file:///D:/Bachelor/Blazegraph/files/Eich-Generated.ttl>')
 
     def update(self, query_string: str):
         return self.server.update(query_string)

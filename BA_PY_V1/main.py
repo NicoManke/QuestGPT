@@ -50,17 +50,20 @@ dwarves who once lived there. Since then, Smaug has been considered the archenem
 Mountains are the fields of the local farmers. In the east of Eich, there are also many fields, as well as orchards. In 
 the east of Eich, you will also find the Green Meadows, a habitat inhabited by thousands of free-roaming horses, cattle, 
 pigs, and sheep. However, it is also home to large wolves, each as big as a stallion, which pose a great danger to 
-humans as well. According to reports, a few of these wolves have been recently spotted near Eich. Some of the residents 
-of Eich include Siegfried, Tom, Hector, and Markus. Siegfried is also known as the brave dragon slayer. He earned this 
-title after defeating a wyvern in a distant land called Astasia, which is far to the south of Eich. Siegfried is a 
-sociable fellow and always ready for the next battle against a dragon or wyvern. Tom is a farmer who tends to some of 
-the northern fields and also has his own apple orchard in the east. Tom works hard and has a simple way of speaking due 
-to his limited education. Recently, one of his fields in the north was burned down by Smaug. Although most of his fields 
-were spared, Tom is very upset. He now fears that Smaug may target his remaining northern fields as well. Markus is a 
-skilled craftsman capable of repairing various objects and structures. Perhaps Markus could repair the rickety old 
-bridge in the Blue Mountains. Finally, there is Mayor Hector, who is a plump and slow-moving fellow but by no means 
-mentally slow. Hector is clever and a good leader of the village of Birk. He interacts frequently with the villagers and 
-is responsible for assigning new quests, even if they arise at the request of the citizens.
+humans as well. Their leader is the Big Bad Wolf. According to reports, a few of these wolves have been recently spotted 
+near Eich. Some of the residents of Eich include Siegfried, Tom, Hector, and Markus. Siegfried is also known as the 
+brave dragon slayer. He earned this title after defeating a wyvern in a distant land called Astasia, which is far to the 
+south of Eich. Siegfried is a sociable fellow and always ready for the next battle against a dragon or wyvern. Tom is a 
+farmer who tends to some of the northern fields and also has his own apple orchard in the east. Tom works hard and has a 
+simple way of speaking due to his limited education. Recently, one of his fields in the north was burned down by Smaug. 
+Although most of his fields were spared, Tom is very upset. He now fears that Smaug may target his remaining northern 
+fields as well. Markus is a skilled craftsman capable of repairing various objects and structures. Perhaps Markus could 
+repair the rickety old bridge in the Blue Mountains. Then there is Mayor Hector, who is a plump and slow-moving fellow 
+but by no means mentally slow. Hector is clever and a good leader of the village of Eich. He interacts frequently with 
+the villagers and is responsible for assigning new quests, even if they arise at the request of the citizens. Finally 
+there is Sven, who was killed by the Big Bad Wolf in the Green Meadows. The green Dragon Lindwurm was also killed by the 
+Big Bad Wolf in the Green Meadows. Another dragon is Baldur, living in the Red Mountains. Siegfried knows about him from 
+his adventures and is therefore the only person in Eich who knows about Baldur.
 '''
 json_structure = json.dumps(data_structure, ensure_ascii=False).replace('"', r'\"')
 instructions = '''
@@ -74,7 +77,7 @@ have an NPC, then put in "null" as the value. Make sure to put the object keys o
 quotes as described in the given JSON structure.'''
 command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
 
-node_types = "Dragon, Location, Person"  # node graph node types here; currently just random examples
+node_types = "Dragon, Location, Person, Wolf"  # node graph node types here; currently just random examples
 
 
 def add_message(message: str, role: str = "user"):
@@ -139,7 +142,7 @@ def get_graph_knowledge(request: str):
         function_call={"name": "query_nodes"},
     )
     response_message = response["choices"][0]["message"]
-    print(f"Function Call: {response_message}")
+    # print(f"Function Call: {response_message}")
 
     # Step 2: check if GPT wanted to call a function
     if response_message.get("function_call"):
@@ -156,34 +159,57 @@ def get_graph_knowledge(request: str):
         queried_nodes = function_to_call(
             required_nodes=function_args.get("required_nodes"),
         )
-
-        ## OPTIONAL!!
-        ## Step 4: send the info on the function call and function response to GPT
-        #msgs.append(response_message)  # extend conversation with assistant's reply
-        #msgs.append(
-        #    {
-        #        "role": "function",
-        #        "name": function_name,
-        #        # output of the actual function gets fed back to generate a response in natural language
-        #        "content": f"Here are the queried nodes: {queried_nodes}",
-        #    }
-        #)
-        ## here an additional message could be integrated/added
-        #second_response = openai.ChatCompletion.create(
-        #    model=model,
-        #    messages=msgs,
-        #)  # get a new response from GPT where it can see the function response
-        #
-        #return second_response
         return queried_nodes
 
 
 def query_nodes(required_nodes: []):
-    # do multiple KG API queries to get all required nodes
-    # ...
-    # let's say the player asks for a dragon fight, then "Smaug" or his identifier should be part of the queries output. But which data type?
-    # How should the Node output look like or how DOES it look like?
-    # ["", ""] seems not to work... -> dictionary or json.loads(...) ?!
+    msgs = []
+    node_query_request = "Give me a SparQL query to retrieve all nodes, including their properties' values, of the following types: "
+    prefixes = '''
+        Also use for this the following prefixes and include them in the query:
+        @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        @prefix schema: <https://schema.org/> .
+        @prefix ex: <http://example.org/> .
+    '''
+    only_code_command = "Only return the code for the query, nothing else."
+    msgs.append(
+        {"role": system_role,
+         "content": f"{node_query_request}({required_nodes}). {prefixes}. {only_code_command}"}
+    )
+
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=msgs
+    )
+
+    response_message = response["choices"][0]["message"]["content"]
+    print(f"\nNode query:\n{response_message}")
+
+    bg = blazegraph.BlazeGraph(server_address)
+    query_result = bg.query(response_message)
+    print(f"Query output vars:\n{query_result['head']['vars']}")
+
+    # getting all values and only the values from the output
+    values = []
+    for var in query_result['head']['vars']:
+        for binding in query_result['results']['bindings']:
+            value = binding[var]['value']
+            values.append(value)
+            # print(f"{var}: {value}")
+
+    var_count = len(query_result['head']['vars'])
+    val_count = len(query_result['results']['bindings'])
+    # basically recombining the triplets
+    triplets = []
+    for i in range(val_count):
+        queried_node = ""
+        for j in range(var_count):
+            queried_node = f"{queried_node}{values[i + j * val_count]} | "
+        triplets.append(queried_node)
+        print(queried_node)
+
     return ["Smaug"]
 
 
@@ -206,18 +232,18 @@ def is_quest_valid(quest_structure: str):
     # print(f"Subtasks:\n{q_sub_tasks}")
 
     # paused until the vAudience Key is available again
-    #i = 1
-    #for task in q_sub_tasks:
-    #    print(f"Task {i}:\n{task}")
-    #    task_consequence = task["Task_Consequences"]
-    #    generate_consequence(task_consequence)
-    #    i = i + 1
-        # query validity
-        # how exactly
-        # 1. does the NPC knows everything he talks about?
-        # 2. is the objective (doable) in the named location
-        # 3. is the description valid -> function call? -> use task_consequence = task["Task_Consequences"]
-        # ...
+    # i = 1
+    # for task in q_sub_tasks:
+    #   print(f"Task {i}:\n{task}")
+    #   task_consequence = task["Task_Consequences"]
+    #   generate_consequence(task_consequence)
+    #   i = i + 1
+    #   query validity
+    #   how exactly
+    #   1. does the NPC knows everything he talks about?
+    #   2. is the objective (doable) in the named location
+    #   3. is the description valid -> function call? -> use task_consequence = task["Task_Consequences"]
+    #   ...
     kg = knowledge_graph.KnowledgeGraph("42")
     return kg.validate_quest(quest_structure)
 
@@ -332,12 +358,8 @@ def convert_quest(quest_structure: str):
 
 
 def main():
-    try:
-        bg = blazegraph.BlazeGraph(server_address)
-    except Exception as e:
-        print(e)
-    else:
-        bg.check()
+    bg = blazegraph.BlazeGraph(server_address)
+    # bg.check()
 
     # exhausted API key...
     # return 0
