@@ -13,7 +13,7 @@ consequences = []
 
 server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
 
-openai.api_key = os.getenv("OPENAI_API_KEY_2")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 model = "gpt-3.5-turbo-0613"  # "gpt-4"
 system_role = "system"
 user_role = "user"
@@ -204,13 +204,13 @@ def query_nodes(required_nodes: []):
     # basically recombining the triplets
     triplets = []
     for i in range(val_count):
-        queried_node = ""
+        triplet = ""
         for j in range(var_count):
-            queried_node = f"{queried_node}{values[i + j * val_count]} | "
-        triplets.append(queried_node)
-        print(queried_node)
+            triplet = f"{triplet}{values[i + j * val_count]} "
+        triplets.append(triplet)
+        print(triplet)
 
-    return ["Smaug"]
+    return triplets
 
 
 def generate_quest(quest_request: str, extracted_nodes):
@@ -374,7 +374,7 @@ def main():
     # -> I want to kill a dragon.
     # get knowledge from graph:
     extracted_nodes = get_graph_knowledge(user_request)
-    print(f"Extracted Nodes: {extracted_nodes}\n")
+    # print(f"Extracted Nodes: {extracted_nodes}\n")
 
     gen_quest = generate_quest(user_request, extracted_nodes)
     # validate generated quest:
