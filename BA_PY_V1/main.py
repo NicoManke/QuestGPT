@@ -213,11 +213,11 @@ def generate_consequence(task_consequence_description: str):
                     "type": "string",
                     "description": "A description of the consequence and its influences on the game world.",
                 },
-                "type": {
+                "cons_type": {
                     "type": "string",
                     "description": "The which the consequence can be assigned to.",
                 },
-                "object": {
+                "cons_object": {
                     "type": "string",
                     "description": "The reference to the object on which the consequence is performed.",
                 },
@@ -230,7 +230,7 @@ def generate_consequence(task_consequence_description: str):
                     "description": "The new value for the param property.",
                 }
             },
-            "required": ["description", "type", "object", "param", "value"],
+            "required": ["description", "cons_type", "cons_object", "param", "value"],
         }
     }]
 
@@ -273,8 +273,8 @@ def generate_consequence(task_consequence_description: str):
 
         new_consequence = function_to_call(
             description=task_consequence_description,
-            type=function_args.get("type"),
-            object=function_args.get("object"),
+            cons_type=function_args.get("cons_type"),
+            cons_object=function_args.get("cons_object"),
             param=function_args.get("param"),
             value=function_args.get("value"),
         )
@@ -284,8 +284,8 @@ def generate_consequence(task_consequence_description: str):
         consequences.append(convert_consequence(f"Failed to generate: {task_consequence_description}"))
 
 
-def convert_consequence(description, type, object, param, value):
-    new_consequence = consequence.Consequence(description, type, object, param, value)
+def convert_consequence(description, cons_type, cons_object, param, value):
+    new_consequence = consequence.Consequence(description, cons_type, cons_object, param, value)
     return new_consequence
 
 
