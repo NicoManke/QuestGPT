@@ -19,11 +19,11 @@ consequences = []
 
 server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
 openai.api_key = os.getenv("OPENAI_API_KEY")
-model = "gpt-4" # "gpt-3.5-turbo-0613"  #
+model = "gpt-4"  # "gpt-3.5-turbo-0613"  #
 system_role = "system"
 user_role = "user"
 
-# node graph node types here; currently just random examples
+# node graph node types here; currently just selected examples
 node_types = "Dragon, Location, Person, Wolf"
 
 
@@ -135,13 +135,12 @@ def query_nodes(required_nodes: []):
         messages=msgs
     )
 
-    # response_message = response["choices"][0]["message"]["content"]
     response_query = utility.correct_query(response["choices"][0]["message"]["content"])
     print(f"\nNode query:\n{response_query}")
 
     bg = blazegraph.BlazeGraph(server_address)
     query_result = bg.query(response_query)
-    print(f"Query output vars:\n{query_result['head']['vars']}")
+    print(f"\nQuery output vars:\n{query_result['head']['vars']}")
 
     # getting all values and only the values from the output
     values = []
@@ -176,7 +175,7 @@ def generate_quest(quest_request: str, extracted_nodes):
 
 def is_quest_valid(quest_structure: str):
     json_quest = json.loads(f'{quest_structure}')
-    print(f"JSON Quest:\n{json_quest}")
+    # print(f"JSON Quest:\n{json_quest}")
     q_source = json_quest["Source"]
     # does our source know every referenced object?
     # ...

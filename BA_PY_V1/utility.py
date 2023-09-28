@@ -1,9 +1,12 @@
 def trim_quest_structure(quest_output: str):
+    print(quest_output)
     start_index = quest_output.find("{")
 
     end_index = quest_output.rfind("}")
 
     trimmed_output = quest_output[start_index:end_index + 1]
+
+    trimmed_output = trimmed_output.replace("json", "")
 
     return trimmed_output
 
