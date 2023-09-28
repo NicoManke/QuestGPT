@@ -1,4 +1,5 @@
-narrative = '''
+def get_narrative():
+    return '''
 The village of Eich has 20 inhabitants. To the north of Eich lies the Blue Mountains. In the Blue Mountains, there is an 
 old path that leads to a bandit camp and over a badly damaged old bridge. At the end of this path lies Dwarf Mountain, 
 where the great blue dragon Smaug lives. Smaug conquered this mountain for himself many decades ago and drove away the 

@@ -17,6 +17,13 @@ class BlazeGraph:
     def query(self, query_string: str):
         return self.server.query(query_string)
 
+    def validate_quest(self, quest):
+        # ...
+        if True:
+            return True
+        else:
+            return False
+
     def check(self):
         result = self.server.query('''
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>

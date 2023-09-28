@@ -1,10 +1,15 @@
 import os
 import openai
 import json
+
 import quest
 import consequence
-import knowledge_graph
 import blazegraph
+import utility
+
+import narrative
+import quest_structure
+import instructions
 
 node_messages = []
 messages = []
@@ -12,72 +17,13 @@ quests = []
 consequences = []
 
 server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
-model = "gpt-3.5-turbo-0613"  # "gpt-4"
+model = "gpt-4"  # "gpt-3.5-turbo-0613"
 system_role = "system"
 user_role = "user"
 
-data_structure = {
-    "Name": "name of quest",
-    "Detailed_Description": "More detailed description explaining exactly what is supposed to happen in the quest.",
-    "Short_Description": "short describing text for the quest that reflects its overall goal",
-    "Source": "the initial source of the quest. Can be an NPC or a quest board, if available",
-    "Chronological": "bool that defines if the sub tasks have to be done in a chronological order or not.",
-    "SubTasks": [{
-        "Name": "name of the sub task",
-        "Description": "description of what needs to be done to complete the sub task",
-        "Type": "enum kill, hunt, catch, explore, craft",
-        "NPC": "name of NPC connected to the subtask",
-        "Location": "name of the location the task takes place at",
-        "DialogueOptions": [{
-            "NPC": "name of the NPC that talks to the player",
-            "Text": "the spoken text",
-            "DialogueID": "the dialogue\'s ID, like d_n, where d stands for dialogue and n is the unique number.",
-            "PreviousDialog": "the ID of the previous dialogue that had to be played before arriving at this dialogue."
-        }],
-        "Task_Consequences": [{
-            "Description": "Description of the changes to the game world that are the results of the player's actions during the task. For example if the player kills an NPC this NPC's triple \"isAlive\" may be changed to false and other NPCs ma be informed about said death."  # explaining the changes and consequences for the game world after completing the task.
-        }]
-    }]
-}
-narrative = '''
-The village of Eich has 20 inhabitants. To the north of Eich lies the Blue Mountains. In the Blue Mountains, there is an 
-old path that leads to a bandit camp and over a badly damaged old bridge. At the end of this path lies Dwarf Mountain, 
-where the great blue dragon Smaug lives. Smaug conquered this mountain for himself many decades ago and drove away the 
-dwarves who once lived there. Since then, Smaug has been considered the archenemy of all dwarves. Behind the bandit camp
-, there is also a secret dungeon teeming with dangerous creatures and great treasures. Between Eich and the Blue 
-Mountains are the fields of the local farmers. In the east of Eich, there are also many fields, as well as orchards. In 
-the east of Eich, you will also find the Green Meadows, a habitat inhabited by thousands of free-roaming horses, cattle, 
-pigs, and sheep. However, it is also home to large wolves, each as big as a stallion, which pose a great danger to 
-humans as well. Their leader is the Big Bad Wolf. According to reports, a few of these wolves have been recently spotted 
-near Eich. Some of the residents of Eich include Siegfried, Tom, Hector, and Markus. Siegfried is also known as the 
-brave dragon slayer. He earned this title after defeating a wyvern in a distant land called Astasia, which is far to the 
-south of Eich. Siegfried is a sociable fellow and always ready for the next battle against a dragon or wyvern. Tom is a 
-farmer who tends to some of the northern fields and also has his own apple orchard in the east. Tom works hard and has a 
-simple way of speaking due to his limited education. Recently, one of his fields in the north was burned down by Smaug. 
-Although most of his fields were spared, Tom is very upset. He now fears that Smaug may target his remaining northern 
-fields as well. Markus is a skilled craftsman capable of repairing various objects and structures. Perhaps Markus could 
-repair the rickety old bridge in the Blue Mountains. Then there is Mayor Hector, who is a plump and slow-moving fellow 
-but by no means mentally slow. Hector is clever and a good leader of the village of Eich. He interacts frequently with 
-the villagers and is responsible for assigning new quests, even if they arise at the request of the citizens. Finally 
-there is Sven, who was killed by the Big Bad Wolf in the Green Meadows. The green Dragon Lindwurm was also killed by the 
-Big Bad Wolf in the Green Meadows. Another dragon is Baldur, living in the Red Mountains. Siegfried knows about him from 
-his adventures and is therefore the only person in Eich who knows about Baldur.
-'''
-json_structure = json.dumps(data_structure, ensure_ascii=False).replace('"', r'\"')
-instructions = '''
-You are now a generator of video game quests for a role-playing game. Generate the quest only in the provided JSON 
-structure! Generate the quest only when you're explicitly requested to do so! Give the player the option to accept or 
-decline a quest in the dialogue with an NPC. The NPC offering the quest should react according to the player's answer. 
-The player character is a stranger who arrives in the village and is not identical to any of the NPCs mentioned in the 
-narrative. In the quest, exclusively use NPCs, locations, items, and factions that are known to you from the given 
-narrative and do not create new locations, NPCs, items, or factions! If a value is null, for example if the task doesn't 
-have an NPC, then put in "null" as the value. Make sure to put the object keys of the JSON structure always in double 
-quotes as described in the given JSON structure.'''
-command = "From now on only generate quests if the system or the user explicitly requests you to do so!"
-
-node_types = "Dragon, Location, Person, Wolf"  # node graph node types here; currently just random examples
+# node graph node types here; currently just selected examples
+node_types = "Dragon, Location, Person, Wolf"
 
 
 def add_message(message: str, role: str = "user"):
@@ -97,15 +43,19 @@ def get_response(response_temp=0.0):
     return response
 
 
+def print_response(response):
+    print(response["choices"][0]["message"]["content"])
+
+
 def prompt():
     # add quest structure
-    add_message(f"Here is a structure describing a quest for a video rpg game: \n{json_structure}", system_role)
+    add_message(f"Here is a structure describing a quest for a video rpg game: \n{quest_structure.get_quest_structure()}", system_role)
     # add narrative
-    add_message(f"Here is the narrative of the world our game takes place in: \n{narrative}", system_role)
+    add_message(f"Here is the narrative of the world our game takes place in: \n{narrative.get_narrative()}", system_role)
     # add clear instructions
-    add_message(instructions, system_role)
+    add_message(instructions.get_instructions(), system_role)
     # make response only on request
-    add_message(command, system_role)
+    add_message(instructions.get_command(), system_role)
 
 
 def get_graph_knowledge(request: str):
@@ -132,7 +82,7 @@ def get_graph_knowledge(request: str):
     msgs.append(
         {"role": system_role,
          "content":
-             f"Decide which of the given node types need to be queried based of the following user request: {request}"}
+             f"Decide which of the given node types need to be queried based of the following user quest request: {request}"}
     )
 
     response = openai.ChatCompletion.create(
@@ -184,12 +134,12 @@ def query_nodes(required_nodes: []):
         messages=msgs
     )
 
-    response_message = response["choices"][0]["message"]["content"]
-    print(f"\nNode query:\n{response_message}")
+    response_query = utility.correct_query(response["choices"][0]["message"]["content"])
+    print(f"\nNode query:\n{response_query}")
 
     bg = blazegraph.BlazeGraph(server_address)
-    query_result = bg.query(response_message)
-    print(f"Query output vars:\n{query_result['head']['vars']}")
+    query_result = bg.query(response_query)
+    print(f"\nQuery output vars:\n{query_result['head']['vars']}")
 
     # getting all values and only the values from the output
     values = []
@@ -217,35 +167,30 @@ def generate_quest(quest_request: str, extracted_nodes):
     add_message(f"Build the quest's story around these given graph nodes extracted from the narrative: {extracted_nodes}")
     add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
     request_response = get_response(1.0)
-    generated_quest = request_response["choices"][0]["message"]["content"]
+    generated_quest = utility.trim_quest_structure(request_response["choices"][0]["message"]["content"])
     quests.append(generated_quest)
     return generated_quest
 
 
 def is_quest_valid(quest_structure: str):
     json_quest = json.loads(f'{quest_structure}')
-    print(f"JSON Quest:\n{json_quest}")
+    # print(f"JSON Quest:\n{json_quest}")
     q_source = json_quest["Source"]
     # does our source know every referenced object?
     # ...
     q_sub_tasks = json_quest["SubTasks"]
-    # print(f"Subtasks:\n{q_sub_tasks}")
 
-    # paused until the vAudience Key is available again
-    i = 1
     for task in q_sub_tasks:
-        print(f"Task {i}:\n{task}")
         task_consequence = task["Task_Consequences"]
         generate_consequence(task_consequence)
-        i = i + 1
         # query validity
         # how exactly
         # 1. does the NPC knows everything he talks about?
         # 2. is the objective (doable) in the named location
         # 3. is the description valid -> function call? -> use task_consequence = task["Task_Consequences"]
         # ...
-    kg = knowledge_graph.KnowledgeGraph("42")
-    return kg.validate_quest(quest_structure)
+    bg = blazegraph.BlazeGraph(server_address)
+    return bg.validate_quest(quest_structure)
 
 
 def generate_consequence(task_consequence_description: str):
@@ -268,11 +213,11 @@ def generate_consequence(task_consequence_description: str):
                     "type": "string",
                     "description": "A description of the consequence and its influences on the game world.",
                 },
-                "type": {
+                "cons_type": {
                     "type": "string",
                     "description": "The which the consequence can be assigned to.",
                 },
-                "object": {
+                "cons_object": {
                     "type": "string",
                     "description": "The reference to the object on which the consequence is performed.",
                 },
@@ -285,7 +230,7 @@ def generate_consequence(task_consequence_description: str):
                     "description": "The new value for the param property.",
                 }
             },
-            "required": ["description", "type", "object", "param", "value"],
+            "required": ["description", "cons_type", "cons_object", "param", "value"],
         }
     }]
 
@@ -328,8 +273,8 @@ def generate_consequence(task_consequence_description: str):
 
         new_consequence = function_to_call(
             description=task_consequence_description,
-            type=function_args.get("type"),
-            object=function_args.get("object"),
+            cons_type=function_args.get("cons_type"),
+            cons_object=function_args.get("cons_object"),
             param=function_args.get("param"),
             value=function_args.get("value"),
         )
@@ -339,8 +284,8 @@ def generate_consequence(task_consequence_description: str):
         consequences.append(convert_consequence(f"Failed to generate: {task_consequence_description}"))
 
 
-def convert_consequence(description, type, object, param, value):
-    new_consequence = consequence.Consequence(description, type, object, param, value)
+def convert_consequence(description, cons_type, cons_object, param, value):
+    new_consequence = consequence.Consequence(description, cons_type, cons_object, param, value)
     return new_consequence
 
 
@@ -359,15 +304,11 @@ def convert_quest(quest_structure: str):
 
 def main():
     bg = blazegraph.BlazeGraph(server_address)
-    # bg.check()
-
-    # exhausted API key...
-    # return 0
 
     # gives the LLM the prompt (narrative, structure, instructions, etc.):
     prompt()
     first_response = get_response()
-    print(first_response["choices"][0]["message"]["content"])
+    print_response(first_response)
     # get user request:
     user_request = input("Please tell us what quest you want to play.")
     # -> I want to explore a dungeon.
@@ -386,76 +327,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-# def run_conversation(user_request):
-#    # Step 1: send the conversation and available functions to GPT
-#    messages.append(
-#        {"role": "user",
-#         "content": "The player wants a new quest. Here is his request for the new quest: " + user_request}
-#    )
-#    functions = [
-#        {
-#            "name": "generate_quest",
-#            "description": "Generates a story coherent quest for our RPG game.",
-#            "parameters": {
-#                "type": "object",
-#                "properties": {
-#                    "node_id": {
-#                        "type": "string",
-#                        "description": "The identification number of the start node in the knowledge graph",
-#                    },
-#                    "quest_type": {
-#                        "type": "string",
-#                        "enum": ["kill", "catch", "collect"],
-#                        "description": "Defines the type of the task that has to be done in the quest.",
-#                    },
-#                },
-#                "required": ["node_id", "quest_type"],
-#            },
-#        }
-#    ]
-#
-#    response = openai.ChatCompletion.create(
-#        model=model,
-#        messages=messages,
-#        functions=functions,
-#        function_call="auto",
-#    )
-#
-#    response_message = response["choices"][0]["message"]
-#    print(response_message.content)
-#
-#    # Step 2: check if GPT wanted to call a function
-#    if response_message.get("function_call"):
-#        # Step 3: call the function
-#        # Note: the JSON response may not always be valid; be sure to handle errors
-#        available_functions = {
-#            "generate_quest": generate_quest,
-#        }  # only one function in this example, but you can have multiple
-#        function_name = response_message["function_call"]["name"]
-#        function_to_call = available_functions[function_name]
-#        function_args = json.loads(response_message["function_call"]["arguments"])
-#        # this is the output of the actual function
-#        function_response = function_to_call(
-#            node_id=function_args.get("node_id"),
-#            quest_type=function_args.get("quest_type"),
-#        )
-#
-#        # Step 4: send the info on the function call and function response to GPT
-#        messages.append(response_message)  # extend conversation with assistant's reply
-#        messages.append(
-#            {
-#                "role": "function",
-#                "name": function_name,
-#                # output of the actual function gets fed back to generate a response in natural language
-#                "content": function_response,
-#            }
-#        )
-#        # here an additional message could be integrated/added
-#        second_response = openai.ChatCompletion.create(
-#            model=model,
-#            messages=messages,
-#        )  # get a new response from GPT where it can see the function response
-#
-#        return second_response
