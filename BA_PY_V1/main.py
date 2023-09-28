@@ -4,7 +4,6 @@ import json
 
 import quest
 import consequence
-import knowledge_graph
 import blazegraph
 import utility
 
@@ -19,7 +18,7 @@ consequences = []
 
 server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
 openai.api_key = os.getenv("OPENAI_API_KEY")
-model = "gpt-4"  # "gpt-3.5-turbo-0613"  #
+model = "gpt-4"  # "gpt-3.5-turbo-0613"
 system_role = "system"
 user_role = "user"
 
@@ -180,23 +179,18 @@ def is_quest_valid(quest_structure: str):
     # does our source know every referenced object?
     # ...
     q_sub_tasks = json_quest["SubTasks"]
-    # print(f"Subtasks:\n{q_sub_tasks}")
 
-    # paused until the vAudience Key is available again
-    i = 1
     for task in q_sub_tasks:
-        print(f"Task {i}:\n{task}")
         task_consequence = task["Task_Consequences"]
         generate_consequence(task_consequence)
-        i = i + 1
         # query validity
         # how exactly
         # 1. does the NPC knows everything he talks about?
         # 2. is the objective (doable) in the named location
         # 3. is the description valid -> function call? -> use task_consequence = task["Task_Consequences"]
         # ...
-    kg = knowledge_graph.KnowledgeGraph("42")
-    return kg.validate_quest(quest_structure)
+    bg = blazegraph.BlazeGraph(server_address)
+    return bg.validate_quest(quest_structure)
 
 
 def generate_consequence(task_consequence_description: str):
