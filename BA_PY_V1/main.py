@@ -1,10 +1,15 @@
+import os
 import blazegraph
 import game
 
 
 def main():
-    game_instance = game.Game()
-    bg = blazegraph.BlazeGraph(game_instance.server_address)
+    game_instance = game.Game(
+        os.getenv("OPENAI_API_KEY"),
+        "gpt-4",
+        'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
+    )
+    bg = blazegraph.BlazeGraph(game_instance.__server_address)
 
     game_instance.prompt()
     first_response = game_instance.get_response()

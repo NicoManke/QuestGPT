@@ -1,4 +1,3 @@
-import os
 import openai
 import json
 
@@ -13,35 +12,34 @@ import instructions
 
 
 class Game:
-    def __init__(self):
-        self.node_messages = []
-        self.messages = []
-        self.quests = []
-        self.consequences = []
+    def __init__(self, api_key, api_model, server_address):
+        self.__node_messages = []
+        self.__messages = []
+        self.__quests = []
+        self.__consequences = []
+        self.SYSTEM_ROLE = "system"
+        self.USER_ROLE = "user"
 
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-
-        self.server_address = 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
-        self.model = "gpt-4"  # "gpt-3.5-turbo-0613"
-        self.system_role = "system"
-        self.user_role = "user"
+        openai.api_key = api_key
+        self.__model = api_model  # "gpt-3.5-turbo-0613" or "gpt-4"
+        self.__server_address = server_address
 
         # node graph node types here; currently just selected examples
-        self.node_types = "Dragon, Location, Person, Wolf"
+        self.__node_types = "Dragon, Location, Person, Wolf"
 
     def add_message(self, message: str, role: str = "user"):
-        self.messages.append(
+        self.__messages.append(
             {"role": role,
              "content": message}
         )
 
     def get_response(self, response_temp=0.0):
         response = openai.ChatCompletion.create(
-            model=self.model,
-            messages=self.messages,
+            model=self.__model,
+            messages=self.__messages,
             temperature=response_temp,
         )
-        self.messages.append(response["choices"][0]["message"])
+        self.__messages.append(response["choices"][0]["message"])
         return response
 
     def print_response(self, response):
@@ -49,13 +47,13 @@ class Game:
 
     def prompt(self):
         # add quest structure
-        self.add_message(f"Here is a structure describing a quest for a video rpg game: \n{quest_structure.get_quest_structure()}", self.system_role)
+        self.add_message(f"Here is a structure describing a quest for a video rpg game: \n{quest_structure.get_quest_structure()}", self.SYSTEM_ROLE)
         # add narrative
-        self.add_message(f"Here is the narrative of the world our game takes place in: \n{narrative.get_narrative()}", self.system_role)
+        self.add_message(f"Here is the narrative of the world our game takes place in: \n{narrative.get_narrative()}", self.SYSTEM_ROLE)
         # add clear instructions
-        self.add_message(instructions.get_instructions(), self.system_role)
+        self.add_message(instructions.get_instructions(), self.SYSTEM_ROLE)
         # make response only on request
-        self.add_message(instructions.get_command(), self.system_role)
+        self.add_message(instructions.get_command(), self.SYSTEM_ROLE)
 
     def get_graph_knowledge(self, request: str):
         msgs = []
@@ -73,17 +71,17 @@ class Game:
             }
         }]
         msgs.append(
-            {"role": self.system_role,
+            {"role": self.SYSTEM_ROLE,
              "content":
-                 f"Here is a list of all node types contained in our knowledge graph: {self.node_types}"}
+                 f"Here is a list of all node types contained in our knowledge graph: {self.__node_types}"}
         )
         msgs.append(
-            {"role": self.system_role,
+            {"role": self.SYSTEM_ROLE,
              "content":
                  f"Decide which of the given node types need to be queried based of the following user quest request: {request}"}
         )
         response = openai.ChatCompletion.create(
-            model=self.model,
+            model=self.__model,
             messages=msgs,
             functions=query_nodes_function,
             function_call={"name": "query_nodes"},
@@ -120,16 +118,16 @@ class Game:
         '''
         only_code_command = "Only return the code for the query, nothing else."
         msgs.append(
-            {"role": self.system_role,
+            {"role": self.SYSTEM_ROLE,
              "content": f"{node_query_request}({required_nodes}). {prefixes}. {only_code_command}"}
         )
         response = openai.ChatCompletion.create(
-            model=self.model,
+            model=self.__model,
             messages=msgs
         )
         response_query = utility.correct_query(response["choices"][0]["message"]["content"])
         print(f"\nNode query:\n{response_query}")
-        bg = blazegraph.BlazeGraph(self.server_address)
+        bg = blazegraph.BlazeGraph(self.__server_address)
         query_result = bg.query(response_query)
         print(f"\nQuery output vars:\n{query_result['head']['vars']}")
         # getting all values and only the values from the output
@@ -156,7 +154,7 @@ class Game:
         self.add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
         request_response = self.get_response(1.0)
         generated_quest = utility.trim_quest_structure(request_response["choices"][0]["message"]["content"])
-        self.quests.append(generated_quest)
+        self.__quests.append(generated_quest)
         return generated_quest
 
     def is_quest_valid(self, quest_structure: str):
@@ -175,7 +173,7 @@ class Game:
             # 2. is the objective (doable) in the named location
             # 3. is the description valid -> function call? -> use task_consequence = task["Task_Consequences"]
             # ...
-        bg = blazegraph.BlazeGraph(self.server_address)
+        bg = blazegraph.BlazeGraph(self.__server_address)
         return bg.validate_quest(quest_structure)
 
     def generate_consequence(self, task_consequence_description: str):
@@ -218,27 +216,27 @@ class Game:
             }
         }]
         msgs.append(
-            {"role": self.system_role,
+            {"role": self.SYSTEM_ROLE,
              "content":
                  f"Decide which of the given types fits the upcoming description for a consequence the most. The types: {cons_types}"}
         )
         msgs.append(
-            {"role": self.system_role,
+            {"role": self.SYSTEM_ROLE,
              "content":
                  f"Here is the description of the consequence: {task_consequence_description}"}
         )
         msgs.append(
-            {"role": self.system_role,
+            {"role": self.SYSTEM_ROLE,
              "content":
                  f"For the description parameter just use the given description."}
         )
         msgs.append(
-            {"role": self.system_role,
+            {"role": self.SYSTEM_ROLE,
              "content":
                  "And decide what objects needs its parameter changed to a new value."}
         )
         response = openai.ChatCompletion.create(
-            model=self.model,
+            model=self.__model,
             messages=msgs,
             functions=convert_consequence_function,
             function_call={"name": "convert_consequence"},
@@ -259,9 +257,9 @@ class Game:
                 value=function_args.get("value"),
             )
             new_consequence.trigger()  # debug!
-            self.consequences.append(new_consequence)
+            self.__consequences.append(new_consequence)
         else:
-            self.consequences.append(self.convert_consequence(f"Failed to generate: {task_consequence_description}"))
+            self.__consequences.append(self.convert_consequence(f"Failed to generate: {task_consequence_description}"))
 
     def convert_consequence(self, description, cons_type, cons_object, param, value):
         new_consequence = consequence.Consequence(description, cons_type, cons_object, param, value)
