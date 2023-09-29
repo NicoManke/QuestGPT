@@ -27,6 +27,9 @@ class Game:
         # node graph node types here; currently just selected examples
         self.__node_types = "Dragon, Location, Person, Wolf"
 
+    def get_server_address(self):
+        return self.__server_address
+
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
             {"role": role,

@@ -9,7 +9,7 @@ def main():
         "gpt-4",
         'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
     )
-    bg = blazegraph.BlazeGraph(game_instance.__server_address)
+    bg = blazegraph.BlazeGraph(game_instance.get_server_address())
 
     game_instance.prompt()
     first_response = game_instance.get_response()
