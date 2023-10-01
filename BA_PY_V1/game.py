@@ -139,6 +139,7 @@ class Game:
         bg = blazegraph.BlazeGraph(self.__server_address)
         query_result = bg.query(response_query)
         print(f"\nQuery output vars:\n{query_result['head']['vars']}")
+        # print(f"\nQuery:\n{query_result}")
         # getting all values and only the values from the output
         values = []
         for var in query_result['head']['vars']:
@@ -150,6 +151,7 @@ class Game:
         val_count = len(query_result['results']['bindings'])
         # basically recombining the triplets
         triplets = []
+        print("\nTriplets:\n")
         for i in range(val_count):
             triplet = ""
             for j in range(var_count):
@@ -159,7 +161,7 @@ class Game:
         return triplets
 
     def generate_quest(self, quest_request: str, extracted_nodes):
-        self.add_message(f"Build the quest's story around these given graph nodes extracted from the narrative: {extracted_nodes}")
+        self.add_message(f"Build the quest's story around some of these given graph nodes extracted from the narrative: {extracted_nodes}")
         self.add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
         request_response = self.get_response(1.0)
         generated_quest = utility.trim_quest_structure(request_response["choices"][0]["message"]["content"])
@@ -167,23 +169,80 @@ class Game:
         return generated_quest
 
     def is_quest_valid(self, quest_structure: str):
-        json_quest = json.loads(f'{quest_structure}')
-        # print(f"JSON Quest:\n{json_quest}")
-        q_source = json_quest["Source"]
-        # does our source know every referenced object?
-        # ...
+        # checking if there is any structure
+        if quest_structure.find("{") == -1 or quest_structure.find("}") == -1:
+            print(quest_structure)
+            return False
+        # catching the case of a not correctly formatted structure
+        try:
+            json_quest = json.loads(f'{quest_structure}')
+        except Exception as e:
+            print("The structure wasn't correctly formatted.")
+            return False
+
         q_sub_tasks = json_quest["SubTasks"]
         for task in q_sub_tasks:
             task_consequence = task["Task_Consequences"]
             self.generate_consequence(task_consequence)
-            # query validity
-            # how exactly
-            # 1. does the NPC knows everything he talks about?
-            # 2. is the objective (doable) in the named location
-            # 3. is the description valid -> function call? -> use task_consequence = task["Task_Consequences"]
-            # ...
-        bg = blazegraph.BlazeGraph(self.__server_address)
-        return bg.validate_quest(quest_structure)
+
+        validity_function = [{
+            "name": "validity_check",
+            "description": "Decides based on the given arguments if the quest is accepted or not.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "is_quest_valid": {
+                        "type": "boolean",
+                        "description": "True if the generated quest is consistent with the narrative and if it is logical and playable. False if it is not.",
+                    },
+                    "validity_explanation": {
+                        "type": "string",
+                        "description": "The explanation and description of why the quest is valid or invalid.",
+                    }
+                }, "required": ["is_quest_valid"],
+            }
+        }]
+
+        # separate copy of the original conversation
+        validation_msgs = self.__messages.copy()
+
+        message = f'''Now only validate if the generated quest, as it is described in the generated structure, is 
+        consistent with the narrative and if it is logical and playable. '''
+        snd_part = f'''If the quest is logical and playable include 
+        "[true]" in your response, if not, include "[false]" in your response! Here is the generated quest again:
+        \n{quest_structure}'''
+
+        validation_msgs.append(
+            {"role": self.SYSTEM_ROLE,
+             "content": message}
+        )
+        response = openai.ChatCompletion.create(
+            model=self.__model,
+            messages=validation_msgs,
+            functions=validity_function,
+            function_call={"name": "validity_check"},
+        )
+        # response_content = response["choices"][0]["message"]["content"]
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        args = response_arguments.get("is_quest_valid")
+        print(f"Args:\n{response_arguments}")
+        valid = args
+        # debug
+        # print(f"\nSelf Validation:\n{response_content}")
+
+        #if response_content.find("[true]") != -1:
+        #    valid = True
+        #elif response_content.find("[false]") != -1:
+        #    valid = False
+        #else:
+        #    print("\nSelf Validation: No \"[bool]\" was found!")
+        #    valid = False
+
+        if valid:
+            bg = blazegraph.BlazeGraph(self.__server_address)
+            valid = bg.validate_quest(quest_structure) and valid
+
+        return valid
 
     def generate_consequence(self, task_consequence_description: str):
         # function call for interpreting the abstract task consequence description
