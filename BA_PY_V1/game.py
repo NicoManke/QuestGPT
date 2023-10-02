@@ -26,8 +26,8 @@ class Game:
 
         # node graph node types here; currently just selected examples
         self.__node_types = '''
-        Location, 
-        Dragon, Person, Wolf, 
+        WorldLocation, 
+        Dragon, Human, Wolf, 
         Item, Weapon, Sword, WarHammer, Apparel, 
         WorldObject,
         WorldResource
@@ -115,31 +115,24 @@ class Game:
             return queried_nodes
 
     def query_nodes(self, required_nodes: []):
-        msgs = []
-        node_query_request = "Give me a SparQL query to retrieve all nodes, including their properties' values, of the following types: "
-        prefixes = '''
-            Also use for this the following prefixes and include them in the query:
-            @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-            @prefix owl: <http://www.w3.org/2002/07/owl#> .
-            @prefix schema: <https://schema.org/> .
-            @prefix ex: <http://example.org/> .
-        '''
-        only_code_command = "Only return the code for the query, nothing else."
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content": f"{node_query_request}({required_nodes}). {prefixes}. {only_code_command}"}
-        )
-        response = openai.ChatCompletion.create(
-            model=self.__model,
-            messages=msgs
-        )
-        response_query = utility.correct_query(response["choices"][0]["message"]["content"])
-        print(f"\nNode query:\n{response_query}")
         bg = blazegraph.BlazeGraph(self.__server_address)
-        query_result = bg.query(response_query)
-        print(f"\nQuery output vars:\n{query_result['head']['vars']}")
-        # print(f"\nQuery:\n{query_result}")
+        try_counter = 0
+
+        # multiple tries, because the query generation tends to be not 100% valid
+        while try_counter < 3:
+            response_query = self.generate_query(required_nodes)
+            try_counter += 1
+            try:
+                query_result = bg.query(response_query)
+            except Exception as e:
+                print(f"\nInvalid query! #Tries: {try_counter}")
+                if try_counter == 3:
+                    print(f"No valid was generated in {try_counter} tries!")
+            else:
+                print(f"\nQuery output vars:\n{query_result['head']['vars']}")
+                # remaining code here...?
+                break
+
         # getting all values and only the values from the output
         values = []
         for var in query_result['head']['vars']:
@@ -151,7 +144,7 @@ class Game:
         val_count = len(query_result['results']['bindings'])
         # basically recombining the triplets
         triplets = []
-        print("\nTriplets:\n")
+        print("\nTriplets:")
         for i in range(val_count):
             triplet = ""
             for j in range(var_count):
@@ -160,6 +153,32 @@ class Game:
             print(triplet)
         return triplets
 
+    def generate_query(self, required_nodes):
+        msgs = []
+        node_query_request = f"Give me a SparQL query to retrieve all nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
+        prefixes = '''
+                    Also use for this the following prefixes and include them in the query:
+                    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+                    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+                    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+                    @prefix schema: <https://schema.org/> .
+                    @prefix ex: <http://example.org/> .
+                '''
+        only_code_command = "Only return the code for the query, nothing else."
+        msgs.append(
+            {"role": self.SYSTEM_ROLE,
+             "content": f"{node_query_request}. {prefixes}. {only_code_command}"}
+        )
+        response = openai.ChatCompletion.create(
+            model=self.__model,
+            messages=msgs
+        )
+        response_query = utility.correct_query(response["choices"][0]["message"]["content"])
+
+        print(f"\nNode query:\n{response_query}")
+
+        return response_query
+
     def generate_quest(self, quest_request: str, extracted_nodes):
         self.add_message(f"Build the quest's story around some of these given graph nodes extracted from the narrative: {extracted_nodes}")
         self.add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
@@ -167,6 +186,26 @@ class Game:
         generated_quest = utility.trim_quest_structure(request_response["choices"][0]["message"]["content"])
         self.__quests.append(generated_quest)
         return generated_quest
+
+    def correct_structure(self, invalid_quest_structure: str):
+        # do call with command of "repairing" structure
+        try_count = 0
+
+        while True:
+            print(f"Correction {try_count}")
+            try_count += 1
+            # do correction call with {invalid_quest_structure}
+            corrected_structure = invalid_quest_structure
+            try:
+                loaded_corrected_structure = json.loads(corrected_structure)
+            except Exception as e:
+                print(f"Error: {e}")
+                if try_count > 2:
+                    break
+            else:
+                return loaded_corrected_structure
+            break
+
 
     def is_quest_valid(self, quest_structure: str):
         # checking if there is any structure
@@ -177,7 +216,8 @@ class Game:
         try:
             json_quest = json.loads(f'{quest_structure}')
         except Exception as e:
-            print("The structure wasn't correctly formatted.")
+            print("The structure wasn't correctly formatted. (Maybe try correcting the structure...")
+            print(f"See the error message:\n{e}")
             return False
 
         q_sub_tasks = json_quest["SubTasks"]
@@ -207,9 +247,7 @@ class Game:
         validation_msgs = self.__messages.copy()
 
         message = f'''Now only validate if the generated quest, as it is described in the generated structure, is 
-        consistent with the narrative and if it is logical and playable. '''
-        snd_part = f'''If the quest is logical and playable include 
-        "[true]" in your response, if not, include "[false]" in your response! Here is the generated quest again:
+        consistent with the narrative and if it is logical and playable. Here is the generated quest again:
         \n{quest_structure}'''
 
         validation_msgs.append(
@@ -222,21 +260,11 @@ class Game:
             functions=validity_function,
             function_call={"name": "validity_check"},
         )
-        # response_content = response["choices"][0]["message"]["content"]
+
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
         args = response_arguments.get("is_quest_valid")
         print(f"Args:\n{response_arguments}")
         valid = args
-        # debug
-        # print(f"\nSelf Validation:\n{response_content}")
-
-        #if response_content.find("[true]") != -1:
-        #    valid = True
-        #elif response_content.find("[false]") != -1:
-        #    valid = False
-        #else:
-        #    print("\nSelf Validation: No \"[bool]\" was found!")
-        #    valid = False
 
         if valid:
             bg = blazegraph.BlazeGraph(self.__server_address)
