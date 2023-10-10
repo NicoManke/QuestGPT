@@ -21,11 +21,11 @@ def correct_query(query_request: str):
         trimmed_output = query_request[start_index:end_index + 1]
         prefixes = '''
 # fixed by code 
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-PREFIX owl: <http://www.w3.org/2002/07/owl#> .
-PREFIX schema: <https://schema.org/> .
-PREFIX ex: <http://example.org/> .
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX schema: <https://schema.org/>
+PREFIX ex: <http://example.org/>
 '''
         trimmed_output = f"{prefixes}\n\n{trimmed_output}"
     else:

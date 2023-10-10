@@ -56,9 +56,9 @@ class Game:
 
     def prompt(self):
         # add quest structure
-        self.add_message(f"Here is a structure describing a quest for a video rpg game: \n{quest_structure.get_quest_structure()}", self.SYSTEM_ROLE)
+        self.add_message(f"Here is a structure describing a quest and its attributes for a video rpg game: \n{quest_structure.get_quest_structure()}", self.SYSTEM_ROLE)
         # add narrative
-        self.add_message(f"Here is the narrative of the world our game takes place in: \n{narrative.get_narrative()}", self.SYSTEM_ROLE)
+        self.add_message(f"Here is the narrative of the world the game takes place in: \n{narrative.get_narrative()}", self.SYSTEM_ROLE)
         # add clear instructions
         self.add_message(instructions.get_instructions(), self.SYSTEM_ROLE)
         # make response only on request
@@ -155,16 +155,16 @@ class Game:
 
     def generate_query(self, required_nodes):
         msgs = []
-        node_query_request = f"Give me a SparQL query to retrieve all nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
+        node_query_request = f"Give me a simple SparQL query to retrieve all nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
         prefixes = '''
                     Also use for this the following prefixes and include them in the query:
-                    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-                    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-                    @prefix owl: <http://www.w3.org/2002/07/owl#> .
-                    @prefix schema: <https://schema.org/> .
-                    @prefix ex: <http://example.org/> .
+                    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                    PREFIX schema: <https://schema.org/>
+                    PREFIX ex: <http://example.org/>
                 '''
-        only_code_command = "Only return the code for the query, nothing else."
+        only_code_command = "Only return the code of the query, nothing else, so no additional descriptions."
         msgs.append(
             {"role": self.SYSTEM_ROLE,
              "content": f"{node_query_request}. {prefixes}. {only_code_command}"}
@@ -180,7 +180,7 @@ class Game:
         return response_query
 
     def generate_quest(self, quest_request: str, extracted_nodes):
-        self.add_message(f"Build the quest's story around some of these given graph nodes extracted from the narrative: {extracted_nodes}")
+        self.add_message(f"Build the quest's story around a few of these given graph nodes extracted from the knowledge graph: {extracted_nodes}")
         self.add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
         request_response = self.get_response(1.0)
         generated_quest = utility.trim_quest_structure(request_response["choices"][0]["message"]["content"])
@@ -209,7 +209,7 @@ class Game:
     def is_quest_valid(self, quest_structure: str):
         # checking if there is any structure
         if quest_structure.find("{") == -1 or quest_structure.find("}") == -1:
-            print(quest_structure)
+            print(f"Quest wasn't generated:\n{quest_structure}")
             return False
         # catching the case of a not correctly formatted structure
         try:
