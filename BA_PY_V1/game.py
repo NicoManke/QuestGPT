@@ -206,7 +206,6 @@ class Game:
                 return loaded_corrected_structure
             break
 
-
     def is_quest_valid(self, quest_structure: str):
         # checking if there is any structure
         if quest_structure.find("{") == -1 or quest_structure.find("}") == -1:
