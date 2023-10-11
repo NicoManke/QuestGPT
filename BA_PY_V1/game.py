@@ -223,6 +223,8 @@ class Game:
         for task in q_sub_tasks:
             task_consequence = task["Task_Consequences"]
             self.generate_consequence(task_consequence)
+        # catch KeyError for missing "Task_Consequences"
+        # what to do? -> correct
 
         validity_function = [{
             "name": "validity_check",
