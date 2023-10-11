@@ -8,4 +8,4 @@ class Consequence:
 
     def trigger(self):
         # change parameter of object_reference to new_value
-        print(f"Cons. is triggered: {self.cons_type}, {self.object_ref}, {self.parameter}, {self.new_value}, \n{self.description}")
+        print(f"Cons. is triggered:\n{self.cons_type}, {self.object_ref}, {self.parameter}, {self.new_value}, \n{self.description}")
