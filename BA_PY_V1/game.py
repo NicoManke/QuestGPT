@@ -239,8 +239,10 @@ class Game:
         try:
             q_sub_tasks = json_quest["SubTasks"]
             for task in q_sub_tasks:
-                task_consequence = task["Task_Consequences"]
-                self.generate_consequence(task_consequence)
+                task_consequences = task["Task_Consequences"]
+                for des in task_consequences:
+                    print(f"\nC.D: {des}")
+                    self.create_consequence(des)
         except KeyError as ke:
             print(f"An KeyError occurred when accessing the json-loaded quest structure: {ke}")
             generated_quest_structure = self.correct_structure(generated_quest_structure, ke)
@@ -297,95 +299,6 @@ class Game:
 
         return valid
 
-    def generate_consequence(self, task_consequence_description: str):
-        # function call for interpreting the abstract task consequence description
-        cons_types = ["spawn_new_object",
-                      "move_object",
-                      "remove_object",
-                      "change_parameter",
-                      "change_state",
-                      "play_sequence"]
-        msgs = []
-        convert_consequence_function = [{
-            "name": "convert_consequence",
-            "description": "Converts...",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "description": {
-                        "type": "string",
-                        "description": "A description of the consequence and its influences on the game world.",
-                    },
-                    "cons_type": {
-                        "type": "string",
-                        "description": "The which the consequence can be assigned to.",
-                    },
-                    "cons_object": {
-                        "type": "string",
-                        "description": "The reference to the object on which the consequence is performed.",
-                    },
-                    "param": {
-                        "type": "string",
-                        "description": "The parameter of the object that will be changed as part of the consequence.",
-                    },
-                    "value": {
-                        "type": "string",
-                        "description": "The new value for the param property.",
-                    }
-                },
-                "required": ["description", "cons_type", "cons_object", "param", "value"],
-            }
-        }]
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content":
-                 f"Decide which of the given types fits the upcoming description for a consequence the most. The types: {cons_types}"}
-        )
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content":
-                 f"Here is the description of the consequence: {task_consequence_description}"}
-        )
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content":
-                 f"For the description parameter just use the given description."}
-        )
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content":
-                 "And decide what objects needs its parameter changed to a new value."}
-        )
-        response = openai.ChatCompletion.create(
-            model=self.__model,
-            messages=msgs,
-            functions=convert_consequence_function,
-            function_call={"name": "convert_consequence"},
-        )
-        response_message = response["choices"][0]["message"]
-        if response_message.get("function_call"):
-            available_functions = {
-                "convert_consequence": self.convert_consequence,
-            }
-            function_name = response_message["function_call"]["name"]
-            function_to_call = available_functions[function_name]
-            function_args = json.loads(response_message["function_call"]["arguments"])
-            new_consequence = function_to_call(
-                description=task_consequence_description,
-                cons_type=function_args.get("cons_type"),
-                cons_object=function_args.get("cons_object"),
-                param=function_args.get("param"),
-                value=function_args.get("value"),
-            )
-            new_consequence.trigger()  # debug!
-            self.__consequences.append(new_consequence)
-        else:
-            self.__consequences.append(self.convert_consequence(f"Failed to generate: {task_consequence_description}"))
-
-    def convert_consequence(self, description, cons_type, cons_object, param, value):
-        new_consequence = consequence.Consequence(description, cons_type, cons_object, param, value)
-        return new_consequence
-
     def convert_quest(self, quest_structure: str):
         # something's not correct yet...
         json_quest = json.loads(f'{quest_structure}')
@@ -397,6 +310,11 @@ class Game:
         q_sub_tasks = json_quest["SubTasks"]
         new_quest = quest.Quest(q_name, q_description, q_s_description, q_source, q_chrono, q_sub_tasks)
         return new_quest
+
+    def create_consequence(self, description: str):
+        new_cons = consequence.Consequence(description)
+        self.__consequences.append(new_cons)
+        return new_cons
 
     def update_graph(self, consequences, node_triplets):
         update_graph_msgs = self.__messages.copy()
