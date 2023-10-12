@@ -23,6 +23,7 @@ class Game:
         openai.api_key = api_key
         self.__model = api_model  # "gpt-3.5-turbo-0613" or "gpt-4"
         self.__server_address = server_address
+        self.__bg = blazegraph.BlazeGraph(self.__server_address)
 
         # node graph node types here; currently just selected examples
         self.__node_types = '''
@@ -115,7 +116,7 @@ class Game:
             return queried_nodes
 
     def query_nodes(self, required_nodes: []):
-        bg = blazegraph.BlazeGraph(self.__server_address)
+        # bg = blazegraph.BlazeGraph(self.__server_address)
         try_counter = 0
 
         # multiple tries, because the query generation tends to be not 100% valid
@@ -123,7 +124,7 @@ class Game:
             response_query = self.generate_query(required_nodes)
             try_counter += 1
             try:
-                query_result = bg.query(response_query)
+                query_result = self.__bg.query(response_query)
             except Exception as e:
                 print(f"\nInvalid query! #Tries: {try_counter}")
                 if try_counter == 3:
@@ -187,15 +188,32 @@ class Game:
         self.__quests.append(generated_quest)
         return generated_quest
 
-    def correct_structure(self, invalid_quest_structure: str):
+    def correct_structure(self, invalid_quest_structure: str, error_msg):
         # do call with command of "repairing" structure
         try_count = 0
 
         while True:
             print(f"Correction {try_count}")
             try_count += 1
-            # do correction call with {invalid_quest_structure}
-            corrected_structure = invalid_quest_structure
+
+            print(f"An KeyError occurred when accessing the json-loaded quest structure: {error_msg}")
+            correction_msgs = self.__messages.copy()
+            correction_msgs.append(
+                {"role": self.SYSTEM_ROLE,
+                 "content": f'''In the generation of the quest structure an error occurred. Here is the error: "{error_msg}".
+                             Please correct the following quest structure based on the already generated content, the originally 
+                             given structure, the narrative and the queried nodes. Here is the incorrectly generated structure:
+                             "{invalid_quest_structure}".
+                             Additionally, check for more structural errors or missing keys and correct them together with the 
+                             provided error.
+                             '''}
+            )
+            response = openai.ChatCompletion.create(
+                model=self.__model,
+                messages=correction_msgs,
+            )
+            corrected_structure = utility.trim_quest_structure(response["choices"][0]["message"]["content"])
+
             try:
                 loaded_corrected_structure = json.loads(corrected_structure)
             except Exception as e:
@@ -204,27 +222,33 @@ class Game:
                     break
             else:
                 return loaded_corrected_structure
-            break
 
-    def is_quest_valid(self, quest_structure: str):
+    def is_quest_valid(self, generated_quest_structure: str):
         # checking if there is any structure
-        if quest_structure.find("{") == -1 or quest_structure.find("}") == -1:
-            print(f"Quest wasn't generated:\n{quest_structure}")
+        if generated_quest_structure.find("{") == -1 or generated_quest_structure.find("}") == -1:
+            print(f"Quest wasn't generated:\n{generated_quest_structure}")
             return False
-        # catching the case of a not correctly formatted structure
+
         try:
-            json_quest = json.loads(f'{quest_structure}')
+            json_quest = json.loads(f'{generated_quest_structure}')
         except Exception as e:
             print("The structure wasn't correctly formatted. (Maybe try correcting the structure...")
             print(f"See the error message:\n{e}")
             return False
 
-        q_sub_tasks = json_quest["SubTasks"]
-        for task in q_sub_tasks:
-            task_consequence = task["Task_Consequences"]
-            self.generate_consequence(task_consequence)
-        # catch KeyError for missing "Task_Consequences"
-        # what to do? -> correct
+        try:
+            q_sub_tasks = json_quest["SubTasks"]
+            for task in q_sub_tasks:
+                task_consequence = task["Task_Consequences"]
+                self.generate_consequence(task_consequence)
+        except KeyError as ke:
+            print(f"An KeyError occurred when accessing the json-loaded quest structure: {ke}")
+            generated_quest_structure = self.correct_structure(generated_quest_structure, ke)
+            # still misses conversion of task_consequences
+        except Exception as e:
+            print(f"Another error occurred when accessing the json-loaded quest structure: {e}")
+            generated_quest_structure = self.correct_structure(generated_quest_structure, e)
+            # still misses conversion of task_consequences
 
         validity_function = [{
             "name": "validity_check",
@@ -249,7 +273,7 @@ class Game:
 
         message = f'''Now only validate if the generated quest, as it is described in the generated structure, is 
         consistent with the narrative and if it is logical and playable. Here is the generated quest again:
-        \n{quest_structure}'''
+        \n{generated_quest_structure}'''
 
         validation_msgs.append(
             {"role": self.SYSTEM_ROLE,
@@ -269,7 +293,7 @@ class Game:
 
         if valid:
             bg = blazegraph.BlazeGraph(self.__server_address)
-            valid = bg.validate_quest(quest_structure) and valid
+            valid = bg.validate_quest(generated_quest_structure) and valid
 
         return valid
 
@@ -373,3 +397,40 @@ class Game:
         q_sub_tasks = json_quest["SubTasks"]
         new_quest = quest.Quest(q_name, q_description, q_s_description, q_source, q_chrono, q_sub_tasks)
         return new_quest
+
+    def update_graph(self, consequences, node_triplets):
+        update_graph_msgs = self.__messages.copy()
+
+        sparql_pattern = "DELETE {} INSERT {} WHERE {}"
+        message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
+        "{node_triplets}".\n
+        In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
+        graph. Your task is to craft only one single SparQL query that logically updates the relevant triplets 
+        influenced by these consequences. Differentiate between changes that are essential for the graph and those that 
+        serve purely narrative purposes. Ensure that node deletion is minimal, focusing on removing and changing only 
+        specific attributes when necessary. Note that the query is solely intended for graph updates and does not 
+        require condition checking. Refrain from deleting entire nodes. 
+        Here are the task consequences:
+        "{consequences}".\n
+        When generating the query, please use the following pattern for the query:
+        "{sparql_pattern}".\n
+        Also, when generating the quest, please use this prefixes:
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX schema: <https://schema.org/>
+        PREFIX ex: <http://example.org/>
+        '''
+
+        update_graph_msgs.append(
+            {"role": self.SYSTEM_ROLE,
+             "content": message}
+        )
+        response = openai.ChatCompletion.create(
+            model=self.__model,
+            messages=update_graph_msgs
+        )
+        update_query = response["choices"][0]["message"]["content"]
+        # instead actually update the graph...
+        #self.__bg.update()
+        print(f"\nUpdate Query:\n{update_query}")
