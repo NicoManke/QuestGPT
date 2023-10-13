@@ -227,6 +227,8 @@ class Game:
         # checking if there is any structure
         if generated_quest_structure.find("{") == -1 or generated_quest_structure.find("}") == -1:
             print(f"Quest wasn't generated:\n{generated_quest_structure}")
+            # there is probably a new recommendation in the given answer, so it may be a good idea to re-feed the answer
+            # back into the quest-generation for a 2nd round
             return False
 
         try:
@@ -320,6 +322,7 @@ class Game:
         update_graph_msgs = self.__messages.copy()
 
         sparql_pattern = "DELETE {} INSERT {} WHERE {}"
+        optional_block = "OPTIONAL {}"
         message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
         "{node_triplets}".\n
         In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
@@ -332,7 +335,9 @@ class Game:
         "{consequences}".\n
         When generating the query, please use the following pattern for the query:
         "{sparql_pattern}".\n
-        Also, when generating the quest, please use this prefixes:
+        You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
+        first time the triple is set.
+        Also, when generating the query, please use this prefixes:
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
