@@ -8,7 +8,7 @@ Apply real-world logic: Craft a story and quest tasks that adhere to existing na
 
 Handling null values: If a value is null (e.g., if a task lacks an NPC), use "null" as the value in the JSON structure.
 
-Format considerations: Always use double quotes for object keys in the JSON structure as specified.
+Format considerations: Always use double quotes for object keys in the JSON structure as specified. And never use "\\n" for line breaks, since they cause errors in JSON.
 
 In case a quest cannot be created, suggest an alternative quest related to the original request. Ensure that each quest is logical, consistent, and seamlessly integrates with the existing narrative.
 '''
