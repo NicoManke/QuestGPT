@@ -32,3 +32,25 @@ PREFIX ex: <http://example.org/>
         trimmed_output = query_request[start_index:end_index + 1]
 
     return trimmed_output
+
+def reorder_query_triplets(query_result):
+    # getting all values and only the values from the output
+    values = []
+    for var in query_result['head']['vars']:
+        for binding in query_result['results']['bindings']:
+            value = binding[var]['value']
+            values.append(value)
+            # print(f"{var}: {value}")
+    var_count = len(query_result['head']['vars'])
+    val_count = len(query_result['results']['bindings'])
+
+    # basically recombining the triplets
+    triplets = []
+    print("\nTriplets:")
+    for i in range(val_count):
+        triplet = ""
+        for j in range(var_count):
+            triplet = f"{triplet}{values[i + j * val_count]} "
+        triplets.append(triplet)
+        print(triplet)
+    return triplets

@@ -76,6 +76,10 @@ class Game:
                     "required_nodes": {
                         "type": "string",
                         "description": "An array of strings naming the node types of which instances should be queried from a knowledge graph.",
+                    },
+                    "required_objective": {
+                        "type": "string",
+                        "description": "The object or objective of the request that seems to be a name for something or someone. It should also be the name of a node, that should be queried from a knowledge graph.",
                     }
                 }, "required": ["required_nodes"],
             }
@@ -112,16 +116,24 @@ class Game:
             # this is the output of the actual function
             queried_nodes = function_to_call(
                 required_nodes=function_args.get("required_nodes"),
+                required_objective=function_args.get("required_objective"),
             )
             return queried_nodes
 
-    def query_nodes(self, required_nodes: []):
+    def query_nodes(self, required_nodes: [], required_objective: str):
         # bg = blazegraph.BlazeGraph(self.__server_address)
         try_counter = 0
+        obj_triplets = []
+        node_triplets = []
+
+        if required_objective:
+            objective_query = self.generate_query_from_name(required_objective)
+            obj_query_result = self.__bg.query(objective_query)
+            obj_triplets = utility.reorder_query_triplets(obj_query_result)
 
         # multiple tries, because the query generation tends to be not 100% valid
         while try_counter < 3:
-            response_query = self.generate_query(required_nodes)
+            response_query = self.generate_query_from_types(required_nodes)
             try_counter += 1
             try:
                 query_result = self.__bg.query(response_query)
@@ -132,29 +144,13 @@ class Game:
             else:
                 print(f"\nQuery output vars:\n{query_result['head']['vars']}")
                 # remaining code here...?
+                node_triplets = utility.reorder_query_triplets(query_result)
                 break
 
-        # getting all values and only the values from the output
-        values = []
-        for var in query_result['head']['vars']:
-            for binding in query_result['results']['bindings']:
-                value = binding[var]['value']
-                values.append(value)
-                # print(f"{var}: {value}")
-        var_count = len(query_result['head']['vars'])
-        val_count = len(query_result['results']['bindings'])
-        # basically recombining the triplets
-        triplets = []
-        print("\nTriplets:")
-        for i in range(val_count):
-            triplet = ""
-            for j in range(var_count):
-                triplet = f"{triplet}{values[i + j * val_count]} "
-            triplets.append(triplet)
-            print(triplet)
+        triplets = obj_triplets + node_triplets
         return triplets
 
-    def generate_query(self, required_nodes):
+    def generate_query_from_types(self, required_nodes):
         msgs = []
         node_query_request = f"Give me a simple SparQL query to retrieve all nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
         prefixes = '''
@@ -162,7 +158,6 @@ class Game:
                     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                     PREFIX owl: <http://www.w3.org/2002/07/owl#>
-                    PREFIX schema: <https://schema.org/>
                     PREFIX ex: <http://example.org/>
                 '''
         only_code_command = "Only return the code of the query, nothing else, so no additional descriptions."
@@ -176,7 +171,23 @@ class Game:
         )
         response_query = utility.correct_query(response["choices"][0]["message"]["content"])
 
-        print(f"\nNode query:\n{response_query}")
+        print(f"\nType-ish node query:\n{response_query}")
+
+        return response_query
+
+    def generate_query_from_name(self, required_node):
+        required_node = required_node.replace(" ", "")
+        head_part = '''
+            PREFIX ex: <http://example.org/>
+
+            SELECT ?node ?property ?value
+            WHERE {'''
+        # where_part = f"ex:{required_node} ?property ?value ."
+        where_part = "VALUES (?node) {(ex:" + required_node + ")}"
+        closing_bracket = "?node ?property ?value . }"
+        response_query = f"{head_part}{where_part}{closing_bracket}"
+#
+        print(f"\nName-ish node query:\n{response_query}")
 
         return response_query
 
@@ -320,40 +331,47 @@ class Game:
 
     def update_graph(self, consequences, node_triplets):
         update_graph_msgs = self.__messages.copy()
-
+        update_queries = []
         sparql_pattern = "DELETE {} INSERT {} WHERE {}"
         optional_block = "OPTIONAL {}"
-        message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
-        "{node_triplets}".\n
-        In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
-        graph. Your task is to craft only one single SparQL query that logically updates the relevant triplets 
-        influenced by these consequences. Differentiate between changes that are essential for the graph and those that 
-        serve purely narrative purposes. Ensure that node deletion is minimal, focusing on removing and changing only 
-        specific attributes when necessary. Note that the query is solely intended for graph updates and does not 
-        require condition checking. Refrain from deleting entire nodes. 
-        Here are the task consequences:
-        "{consequences}".\n
-        When generating the query, please use the following pattern for the query:
-        "{sparql_pattern}".\n
-        You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
-        first time the triple is set.
-        Also, when generating the query, please use this prefixes:
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX schema: <https://schema.org/>
-        PREFIX ex: <http://example.org/>
-        '''
 
-        update_graph_msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content": message}
-        )
-        response = openai.ChatCompletion.create(
-            model=self.__model,
-            messages=update_graph_msgs
-        )
-        update_query = response["choices"][0]["message"]["content"]
+        for cons in consequences:
+            message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
+            "{node_triplets}".\n
+            In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
+            graph. Your task is to craft only one single SparQL query that logically updates the relevant triplets 
+            influenced by these consequences. Differentiate between changes that are essential for the graph and those that 
+            serve purely narrative purposes. Ensure that node deletion is minimal, focusing on removing and changing only 
+            specific attributes when necessary. Note that the query is solely intended for graph updates and does not 
+            require condition checking. Refrain from deleting entire nodes. 
+            Here are the task consequences:
+            "{cons}".\n
+            When generating the query, please use the following pattern for the query:
+            "{sparql_pattern}".\n
+            You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
+            first time the triple is set.
+            Also, when generating the query, please use this prefixes:
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            PREFIX schema: <https://schema.org/>
+            PREFIX ex: <http://example.org/>
+            '''
+
+            update_graph_msgs.append(
+                {"role": self.SYSTEM_ROLE,
+                 "content": message}
+            )
+            response = openai.ChatCompletion.create(
+                model=self.__model,
+                messages=update_graph_msgs
+            )
+            update_queries.append(response["choices"][0]["message"]["content"])
+
         # instead actually update the graph...
         #self.__bg.update()
-        print(f"\nUpdate Query:\n{update_query}")
+        print(f"\nUpdate Queries:")
+        i: int = 1
+        for upt_query in update_queries:
+            print(f"U.Q. {i}:\n{upt_query}")
+            i += 1
