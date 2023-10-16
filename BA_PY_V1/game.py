@@ -123,12 +123,13 @@ class Game:
     def query_nodes(self, required_nodes: [], required_objective: str):
         # bg = blazegraph.BlazeGraph(self.__server_address)
         try_counter = 0
-
+        obj_triplets = []
+        node_triplets = []
 
         if required_objective:
             objective_query = self.generate_query_from_name(required_objective)
             obj_query_result = self.__bg.query(objective_query)
-            print(f"Obj. Q.:\n{obj_query_result}")
+            obj_triplets = utility.reorder_query_triplets(obj_query_result)
 
         # multiple tries, because the query generation tends to be not 100% valid
         while try_counter < 3:
@@ -143,10 +144,9 @@ class Game:
             else:
                 print(f"\nQuery output vars:\n{query_result['head']['vars']}")
                 # remaining code here...?
+                node_triplets = utility.reorder_query_triplets(query_result)
                 break
 
-        obj_triplets = utility.reorder_query_triplets(obj_query_result)
-        node_triplets = utility.reorder_query_triplets(query_result)
         triplets = obj_triplets + node_triplets
         return triplets
 
@@ -158,7 +158,6 @@ class Game:
                     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                     PREFIX owl: <http://www.w3.org/2002/07/owl#>
-                    PREFIX schema: <https://schema.org/>
                     PREFIX ex: <http://example.org/>
                 '''
         only_code_command = "Only return the code of the query, nothing else, so no additional descriptions."
@@ -177,7 +176,7 @@ class Game:
         return response_query
 
     def generate_query_from_name(self, required_node):
-        msgs = []
+        required_node = required_node.replace(" ", "")
         head_part = '''
             PREFIX ex: <http://example.org/>
 
@@ -187,19 +186,6 @@ class Game:
         where_part = "VALUES (?node) {(ex:" + required_node + ")}"
         closing_bracket = "?node ?property ?value . }"
         response_query = f"{head_part}{where_part}{closing_bracket}"
-
-        #node_query_request = f'''Now use the following query template and replace "objective" with {required_node} to
-        #generate a new query that finds the nodes that are named like this. Here is the template "{template}".'''
-#
-        #msgs.append(
-        #    {"role": self.SYSTEM_ROLE,
-        #     "content": f"{node_query_request}."}
-        #)
-        #response = openai.ChatCompletion.create(
-        #    model=self.__model,
-        #    messages=msgs
-        #)
-        #response_query = response["choices"][0]["message"]["content"]
 #
         print(f"\nName-ish node query:\n{response_query}")
 
