@@ -1,6 +1,8 @@
-import openai
+#import openai
 import json
+import time
 
+import openai_facade
 import quest
 import consequence
 import blazegraph
@@ -20,8 +22,10 @@ class Game:
         self.SYSTEM_ROLE = "system"
         self.USER_ROLE = "user"
 
-        openai.api_key = api_key
-        self.__model = api_model  # "gpt-3.5-turbo-0613" or "gpt-4"
+        self.__gpt_facade = openai_facade.OpenAIFacade(api_key, api_model, server_address)
+
+        #openai.api_key = api_key
+        #self.__model = api_model  # "gpt-3.5-turbo-0613" or "gpt-4"
         self.__server_address = server_address
         self.__bg = blazegraph.BlazeGraph(self.__server_address)
 
@@ -44,11 +48,12 @@ class Game:
         )
 
     def get_response(self, response_temp=0.0):
-        response = openai.ChatCompletion.create(
-            model=self.__model,
-            messages=self.__messages,
-            temperature=response_temp,
-        )
+        response = self.__gpt_facade.get_response(self.__messages, response_temp)
+        #response = openai.ChatCompletion.create(
+        #    model=self.__model,
+        #    messages=self.__messages,
+        #    temperature=response_temp,
+        #)
         self.__messages.append(response["choices"][0]["message"])
         return response
 
@@ -94,12 +99,13 @@ class Game:
              "content":
                  f"Decide which of the given node types need to be queried based of the following user quest request: {request}"}
         )
-        response = openai.ChatCompletion.create(
-            model=self.__model,
-            messages=msgs,
-            functions=query_nodes_function,
-            function_call={"name": "query_nodes"},
-        )
+        response = self.__gpt_facade.make_function_call(msgs, query_nodes_function, "query_nodes")
+        #response = openai.ChatCompletion.create(
+        #    model=self.__model,
+        #    messages=msgs,
+        #    functions=query_nodes_function,
+        #    function_call={"name": "query_nodes"},
+        #)
         response_message = response["choices"][0]["message"]
         # print(f"Function Call: {response_message}")
         # Step 2: check if GPT wanted to call a function
@@ -112,7 +118,7 @@ class Game:
             function_name = response_message["function_call"]["name"]
             function_to_call = available_functions[function_name]
             function_args = json.loads(response_message["function_call"]["arguments"])
-            print(f"Args: {function_args}")
+            print(f"\nArgs: {function_args}")
             # this is the output of the actual function
             queried_nodes = function_to_call(
                 required_nodes=function_args.get("required_nodes"),
@@ -176,10 +182,11 @@ VALUES (?node) {(ex:Stranger)}
             {"role": self.SYSTEM_ROLE,
              "content": f"{node_query_request}. {prefixes}. {only_code_command}"}
         )
-        response = openai.ChatCompletion.create(
-            model=self.__model,
-            messages=msgs
-        )
+        response = self.__gpt_facade.get_response(msgs)
+        #response = openai.ChatCompletion.create(
+        #    model=self.__model,
+        #    messages=msgs
+        #)
         response_query = utility.correct_query(response["choices"][0]["message"]["content"])
 
         print(f"\nType-ish node query:\n{response_query}")
@@ -230,10 +237,11 @@ VALUES (?node) {(ex:Stranger)}
                              provided error.
                              '''}
             )
-            response = openai.ChatCompletion.create(
-                model=self.__model,
-                messages=correction_msgs,
-            )
+            response = self.__gpt_facade.get_response(correction_msgs)
+            #response = openai.ChatCompletion.create(
+            #    model=self.__model,
+            #    messages=correction_msgs,
+            #)
             corrected_structure = utility.trim_quest_structure(response["choices"][0]["message"]["content"])
 
             try:
@@ -305,16 +313,17 @@ VALUES (?node) {(ex:Stranger)}
             {"role": self.SYSTEM_ROLE,
              "content": message}
         )
-        response = openai.ChatCompletion.create(
-            model=self.__model,
-            messages=validation_msgs,
-            functions=validity_function,
-            function_call={"name": "validity_check"},
-        )
+        response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check")
+        #response = openai.ChatCompletion.create(
+        #    model=self.__model,
+        #    messages=validation_msgs,
+        #    functions=validity_function,
+        #    function_call={"name": "validity_check"},
+        #)
 
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
         args = response_arguments.get("is_quest_valid")
-        print(f"Args:\n{response_arguments}")
+        print(f"\nArgs:\n{response_arguments}")
         valid = args
 
         if valid:
@@ -373,10 +382,19 @@ VALUES (?node) {(ex:Stranger)}
                 {"role": self.SYSTEM_ROLE,
                  "content": message}
             )
-            response = openai.ChatCompletion.create(
-                model=self.__model,
-                messages=update_graph_msgs
-            )
+            #while True:
+            #    try:
+            #        response = openai.ChatCompletion.create(
+            #            model=self.__model,
+            #            messages=update_graph_msgs
+            #        )
+            #    except openai.error.RateLimitError:
+            #        waiting_time = 10
+            #        print(f"\nWaiting for {waiting_time} seconds...\n")
+            #        time.sleep(waiting_time)
+            #    else:
+            #        break
+            response = self.__gpt_facade.get_response(update_graph_msgs)
             update_queries.append(response["choices"][0]["message"]["content"])
 
         # instead actually update the graph...
