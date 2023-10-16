@@ -123,8 +123,19 @@ class Game:
     def query_nodes(self, required_nodes: [], required_objective: str):
         # bg = blazegraph.BlazeGraph(self.__server_address)
         try_counter = 0
+        player_triplets = []
         obj_triplets = []
         node_triplets = []
+
+        player_query_results = self.__bg.query('''
+PREFIX ex: <http://example.org/>
+
+SELECT ?node ?property ?value
+WHERE {
+VALUES (?node) {(ex:Stranger)}
+?node ?property ?value .
+}''')
+        player_triplets = utility.reorder_query_triplets(player_query_results)
 
         if required_objective:
             objective_query = self.generate_query_from_name(required_objective)
@@ -147,7 +158,7 @@ class Game:
                 node_triplets = utility.reorder_query_triplets(query_result)
                 break
 
-        triplets = obj_triplets + node_triplets
+        triplets = player_triplets + obj_triplets + node_triplets
         return triplets
 
     def generate_query_from_types(self, required_nodes):
