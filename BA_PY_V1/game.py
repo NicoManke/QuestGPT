@@ -147,7 +147,7 @@ VALUES (?node) {(ex:Stranger)}
 
     def generate_query_from_types(self, required_nodes):
         msgs = []
-        node_query_request = f"You are a SparQL expert, now give me a simple SparQL query to retrieve all nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
+        node_query_request = f"You are a SparQL expert, now give me a simple SparQL query to retrieve all DISTINCT nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
         prefixes = '''
                     Also use for this the following prefixes and include them in the query:
                     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -182,9 +182,10 @@ VALUES (?node) {(ex:Stranger)}
         return response_query
 
     def generate_quest(self, quest_request: str, extracted_nodes):
-        self.add_message(f"Take a deep breath and think about waht should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}")
-        self.add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
-        request_response = self.get_response(1.0)
+        msgs = self.__messages.copy()
+        msgs.append(Message(f"Take a deep breath and think about waht should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}", self.USER_ROLE))
+        msgs.append(Message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system"))
+        request_response = self.__gpt_facade.get_response(msgs, 1.0)  # self.get_response(1.0)
         generated_quest = trim_quest_structure(request_response["choices"][0]["message"]["content"])
         self.__quests.append(generated_quest)
         return generated_quest
@@ -200,12 +201,11 @@ VALUES (?node) {(ex:Stranger)}
             print(f"An KeyError occurred when accessing the json-loaded quest structure: {error_msg}")
             correction_msgs = self.__messages.copy()
             correction_msgs.append(Message(
-                f'''In the generation of the quest structure an error occurred. Here is the error: "{error_msg}".
-                    Please correct the following quest structure based on the already generated content, the originally 
-                    given structure, the narrative and the queried nodes. Here is the incorrectly generated structure:
+                f'''In the generation of the quest structure an error occurred, see: "{error_msg}".
+                    Correct the following quest structure based on the already generated content, the originally 
+                    given structure, the narrative and the queried nodes. Here is the incorrect structure:
                     "{invalid_quest_structure}".
-                    Additionally, check for more structural errors or missing keys and correct them together with the 
-                    provided error.
+                    Additionally, check for more structural errors or missing keys and correct them.
                     ''',
                 self.SYSTEM_ROLE
             ))
@@ -333,13 +333,14 @@ VALUES (?node) {(ex:Stranger)}
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             PREFIX owl: <http://www.w3.org/2002/07/owl#>
-            PREFIX schema: <https://schema.org/>
             PREFIX ex: <http://example.org/>
             '''
 
             update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
             response = self.__gpt_facade.get_response(update_graph_msgs)
             update_queries.append(response["choices"][0]["message"]["content"])
+            usage = response["usage"]
+            print(f"\nToken Info: \n{usage}")
 
         # instead actually update the graph...
         print(f"\nUpdate Queries:")

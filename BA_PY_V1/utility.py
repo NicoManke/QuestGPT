@@ -47,9 +47,8 @@ def reorder_query_triplets(query_result):
     values = []
     for var in query_result['head']['vars']:
         for binding in query_result['results']['bindings']:
-            value = binding[var]['value']
+            value = trim_triplets(binding[var]['value'])
             values.append(value)
-            # print(f"{var}: {value}")
     var_count = len(query_result['head']['vars'])
     val_count = len(query_result['results']['bindings'])
 
@@ -63,3 +62,11 @@ def reorder_query_triplets(query_result):
         triplets.append(triplet)
         print(triplet)
     return triplets
+
+
+def trim_triplets(triplet_part: str):
+    triplet_part = triplet_part.replace("http://example.org/", "")
+    triplet_part = triplet_part.replace("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "")
+    triplet_part = triplet_part.replace("http://www.w3.org/2000/01/rdf-schema#", "")
+    triplet_part = triplet_part.replace("http://www.w3.org/2002/07/owl#", "")
+    return triplet_part
