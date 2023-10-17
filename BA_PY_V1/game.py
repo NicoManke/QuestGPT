@@ -147,7 +147,7 @@ VALUES (?node) {(ex:Stranger)}
 
     def generate_query_from_types(self, required_nodes):
         msgs = []
-        node_query_request = f"Give me a simple SparQL query to retrieve all nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
+        node_query_request = f"You are a SparQL expert, now give me a simple SparQL query to retrieve all nodes, including their properties' values, of the following types and their subclasses: ({required_nodes})"
         prefixes = '''
                     Also use for this the following prefixes and include them in the query:
                     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -182,7 +182,7 @@ VALUES (?node) {(ex:Stranger)}
         return response_query
 
     def generate_quest(self, quest_request: str, extracted_nodes):
-        self.add_message(f"Build the quest's story around a few of these given graph nodes extracted from the knowledge graph: {extracted_nodes}")
+        self.add_message(f"Take a deep breath and think about waht should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}")
         self.add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
         request_response = self.get_response(1.0)
         generated_quest = trim_quest_structure(request_response["choices"][0]["message"]["content"])
@@ -277,7 +277,7 @@ VALUES (?node) {(ex:Stranger)}
         consistent with the narrative and if it is logical and playable. Here is the generated quest again:
         \n{generated_quest_structure}'''
 
-        validation_msgs.append(message(message, self.SYSTEM_ROLE))
+        validation_msgs.append(Message(message, self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check")
 
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
@@ -337,7 +337,7 @@ VALUES (?node) {(ex:Stranger)}
             PREFIX ex: <http://example.org/>
             '''
 
-            update_graph_msgs.append(message(message, self.SYSTEM_ROLE))
+            update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
             response = self.__gpt_facade.get_response(update_graph_msgs)
             update_queries.append(response["choices"][0]["message"]["content"])
 
