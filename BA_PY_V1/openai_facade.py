@@ -3,11 +3,12 @@ import time
 
 
 class OpenAIFacade:
-    def __init__(self, api_key: str, api_model: str, server_address: str):
+    def __init__(self, api_key: str, api_model: str, max_request_tries=12, waiting_time=30):
         openai.api_key = api_key
         self.__model = api_model  # "gpt-3.5-turbo-0613" or "gpt-4"
+        self.__max_tries = max_request_tries
+        self.__waiting_time = waiting_time
         self.__messages = []
-        self.__waiting_time = 10
 
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(

@@ -1,3 +1,11 @@
+def create_message(content: str, role: str):
+    return {"role": role, "content": content}
+
+
+def print_response(response):
+    print(response["choices"][0]["message"]["content"])
+
+
 def trim_quest_structure(quest_output: str):
     print(quest_output)
     start_index = quest_output.find("{")
@@ -32,6 +40,7 @@ PREFIX ex: <http://example.org/>
         trimmed_output = query_request[start_index:end_index + 1]
 
     return trimmed_output
+
 
 def reorder_query_triplets(query_result):
     # getting all values and only the values from the output

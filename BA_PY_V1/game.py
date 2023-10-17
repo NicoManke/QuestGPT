@@ -1,12 +1,14 @@
-#import openai
 import json
-import time
 
 import openai_facade
 import quest
 import consequence
 import blazegraph
-import utility
+from utility import create_message as Message
+from utility import trim_quest_structure
+from utility import reorder_query_triplets
+from utility import correct_query
+from utility import print_response
 
 import narrative
 import quest_structure
@@ -14,7 +16,7 @@ import instructions
 
 
 class Game:
-    def __init__(self, api_key, api_model, server_address):
+    def __init__(self, api_key, api_model, max_request_tries, waiting_time, server_address):
         self.__node_messages = []
         self.__messages = []
         self.__quests = []
@@ -22,10 +24,8 @@ class Game:
         self.SYSTEM_ROLE = "system"
         self.USER_ROLE = "user"
 
-        self.__gpt_facade = openai_facade.OpenAIFacade(api_key, api_model, server_address)
+        self.__gpt_facade = openai_facade.OpenAIFacade(api_key, api_model, max_request_tries, waiting_time=waiting_time)
 
-        #openai.api_key = api_key
-        #self.__model = api_model  # "gpt-3.5-turbo-0613" or "gpt-4"
         self.__server_address = server_address
         self.__bg = blazegraph.BlazeGraph(self.__server_address)
 
@@ -38,9 +38,6 @@ class Game:
         WorldResource
         '''
 
-    def get_server_address(self):
-        return self.__server_address
-
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
             {"role": role,
@@ -49,16 +46,8 @@ class Game:
 
     def get_response(self, response_temp=0.0):
         response = self.__gpt_facade.get_response(self.__messages, response_temp)
-        #response = openai.ChatCompletion.create(
-        #    model=self.__model,
-        #    messages=self.__messages,
-        #    temperature=response_temp,
-        #)
         self.__messages.append(response["choices"][0]["message"])
         return response
-
-    def print_response(self, response):
-        print(response["choices"][0]["message"]["content"])
 
     def prompt(self):
         # add quest structure
@@ -89,23 +78,14 @@ class Game:
                 }, "required": ["required_nodes"],
             }
         }]
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content":
-                 f"Here is a list of all node types contained in our knowledge graph: {self.__node_types}"}
-        )
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content":
-                 f"Decide which of the given node types need to be queried based of the following user quest request: {request}"}
-        )
+        msgs.append(Message(
+            f"Here is a list of all node types contained in our knowledge graph: {self.__node_types}",
+            self.SYSTEM_ROLE))
+        msgs.append(Message(
+            f"Decide which of the given node types need to be queried based of the following user quest request: {request}",
+            self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(msgs, query_nodes_function, "query_nodes")
-        #response = openai.ChatCompletion.create(
-        #    model=self.__model,
-        #    messages=msgs,
-        #    functions=query_nodes_function,
-        #    function_call={"name": "query_nodes"},
-        #)
+
         response_message = response["choices"][0]["message"]
         # print(f"Function Call: {response_message}")
         # Step 2: check if GPT wanted to call a function
@@ -127,9 +107,6 @@ class Game:
             return queried_nodes
 
     def query_nodes(self, required_nodes: [], required_objective: str):
-        # bg = blazegraph.BlazeGraph(self.__server_address)
-        try_counter = 0
-        player_triplets = []
         obj_triplets = []
         node_triplets = []
 
@@ -141,14 +118,15 @@ WHERE {
 VALUES (?node) {(ex:Stranger)}
 ?node ?property ?value .
 }''')
-        player_triplets = utility.reorder_query_triplets(player_query_results)
+        player_triplets = reorder_query_triplets(player_query_results)
 
         if required_objective:
             objective_query = self.generate_query_from_name(required_objective)
             obj_query_result = self.__bg.query(objective_query)
-            obj_triplets = utility.reorder_query_triplets(obj_query_result)
+            obj_triplets = reorder_query_triplets(obj_query_result)
 
         # multiple tries, because the query generation tends to be not 100% valid
+        try_counter = 0
         while try_counter < 3:
             response_query = self.generate_query_from_types(required_nodes)
             try_counter += 1
@@ -161,7 +139,7 @@ VALUES (?node) {(ex:Stranger)}
             else:
                 print(f"\nQuery output vars:\n{query_result['head']['vars']}")
                 # remaining code here...?
-                node_triplets = utility.reorder_query_triplets(query_result)
+                node_triplets = reorder_query_triplets(query_result)
                 break
 
         triplets = player_triplets + obj_triplets + node_triplets
@@ -178,16 +156,10 @@ VALUES (?node) {(ex:Stranger)}
                     PREFIX ex: <http://example.org/>
                 '''
         only_code_command = "Only return the code of the query, nothing else, so no additional descriptions."
-        msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content": f"{node_query_request}. {prefixes}. {only_code_command}"}
-        )
+        msgs.append(Message(f"{node_query_request}. {prefixes}. {only_code_command}", self.SYSTEM_ROLE))
+
         response = self.__gpt_facade.get_response(msgs)
-        #response = openai.ChatCompletion.create(
-        #    model=self.__model,
-        #    messages=msgs
-        #)
-        response_query = utility.correct_query(response["choices"][0]["message"]["content"])
+        response_query = correct_query(response["choices"][0]["message"]["content"])
 
         print(f"\nType-ish node query:\n{response_query}")
 
@@ -213,7 +185,7 @@ VALUES (?node) {(ex:Stranger)}
         self.add_message(f"Build the quest's story around a few of these given graph nodes extracted from the knowledge graph: {extracted_nodes}")
         self.add_message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system")
         request_response = self.get_response(1.0)
-        generated_quest = utility.trim_quest_structure(request_response["choices"][0]["message"]["content"])
+        generated_quest = trim_quest_structure(request_response["choices"][0]["message"]["content"])
         self.__quests.append(generated_quest)
         return generated_quest
 
@@ -227,22 +199,18 @@ VALUES (?node) {(ex:Stranger)}
 
             print(f"An KeyError occurred when accessing the json-loaded quest structure: {error_msg}")
             correction_msgs = self.__messages.copy()
-            correction_msgs.append(
-                {"role": self.SYSTEM_ROLE,
-                 "content": f'''In the generation of the quest structure an error occurred. Here is the error: "{error_msg}".
-                             Please correct the following quest structure based on the already generated content, the originally 
-                             given structure, the narrative and the queried nodes. Here is the incorrectly generated structure:
-                             "{invalid_quest_structure}".
-                             Additionally, check for more structural errors or missing keys and correct them together with the 
-                             provided error.
-                             '''}
-            )
+            correction_msgs.append(Message(
+                f'''In the generation of the quest structure an error occurred. Here is the error: "{error_msg}".
+                    Please correct the following quest structure based on the already generated content, the originally 
+                    given structure, the narrative and the queried nodes. Here is the incorrectly generated structure:
+                    "{invalid_quest_structure}".
+                    Additionally, check for more structural errors or missing keys and correct them together with the 
+                    provided error.
+                    ''',
+                self.SYSTEM_ROLE
+            ))
             response = self.__gpt_facade.get_response(correction_msgs)
-            #response = openai.ChatCompletion.create(
-            #    model=self.__model,
-            #    messages=correction_msgs,
-            #)
-            corrected_structure = utility.trim_quest_structure(response["choices"][0]["message"]["content"])
+            corrected_structure = trim_quest_structure(response["choices"][0]["message"]["content"])
 
             try:
                 loaded_corrected_structure = json.loads(corrected_structure)
@@ -309,17 +277,8 @@ VALUES (?node) {(ex:Stranger)}
         consistent with the narrative and if it is logical and playable. Here is the generated quest again:
         \n{generated_quest_structure}'''
 
-        validation_msgs.append(
-            {"role": self.SYSTEM_ROLE,
-             "content": message}
-        )
+        validation_msgs.append(message(message, self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check")
-        #response = openai.ChatCompletion.create(
-        #    model=self.__model,
-        #    messages=validation_msgs,
-        #    functions=validity_function,
-        #    function_call={"name": "validity_check"},
-        #)
 
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
         args = response_arguments.get("is_quest_valid")
@@ -378,27 +337,11 @@ VALUES (?node) {(ex:Stranger)}
             PREFIX ex: <http://example.org/>
             '''
 
-            update_graph_msgs.append(
-                {"role": self.SYSTEM_ROLE,
-                 "content": message}
-            )
-            #while True:
-            #    try:
-            #        response = openai.ChatCompletion.create(
-            #            model=self.__model,
-            #            messages=update_graph_msgs
-            #        )
-            #    except openai.error.RateLimitError:
-            #        waiting_time = 10
-            #        print(f"\nWaiting for {waiting_time} seconds...\n")
-            #        time.sleep(waiting_time)
-            #    else:
-            #        break
+            update_graph_msgs.append(message(message, self.SYSTEM_ROLE))
             response = self.__gpt_facade.get_response(update_graph_msgs)
             update_queries.append(response["choices"][0]["message"]["content"])
 
         # instead actually update the graph...
-        #self.__bg.update()
         print(f"\nUpdate Queries:")
         i: int = 1
         for upt_query in update_queries:
