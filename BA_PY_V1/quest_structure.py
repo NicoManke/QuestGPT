@@ -10,22 +10,23 @@ def get_quest_structure():
         "Chronological": "bool that defines based on the quest's story if the sub tasks have to be completed in a chronological order or not.",
         "SubTasks": [{
             "Name": "name of the sub task",
-            "Description": "detailed description of what needs to be done to complete the sub task",
-            "Type": "an enum with the following values: kill, hunt, catch, explore, craft, dialogue",
-            "NPC": "name of the NPC connected to the subtask",
+            "Description": "detailed description of what needs to be done to complete the sub task, without spoiling a possible twist or other unpredivtable and surprising events",
+            "Type": "an enum with one of the following values: kill, hunt, catch, explore, craft, dialogue",
+            "NPC": "name of the NPC that is connected to or part of the subtask",
             "Location": "name of the location the task takes place at",
             "DialogueOptions": [{
                 "NPC": "name of the NPC, that talks to the player, or the player himself, if it is his own dialogue",
                 "Text": "the spoken dialogue, either starting the conversation or following the previous dialogue",
-                "DialogueID": "the dialogue's ID, like d_n, where d stands for dialogue and n is the unique number.",
+                "DialogueID": "the dialogue's ID, like d_n, where d stands for dialogue and n is the unique number, like d_1.",
                 "PreviousDialog": "the ID of the previous dialogue that had to be played before arriving at this dialogue."
             }],
             "Task_Consequences": [{
                 "Description": '''
-                Provide short descriptive sentences for the changes to the game world and the Knowledge Graph resulting 
-                from the player's actions during the task. Use the parameter "description" to detail the alterations in 
-                properties, states, or relationships of nodes in the graph. To learn about already existing properties
-                , states and relationships see the provided triplets and base the changes off of them.
+                Provide short descriptive sentences for the changes to the game world and the knowledge graph resulting 
+                from the player's actions during the task and resulting from changes required by the task itself, like 
+                for example the location change of an NPC. Use the parameter "description" to detail the alterations in 
+                properties, states, or relationships of nodes in the graph. Try to use only already existing properties
+                , states and relationships. To learn about them see the provided triplets and base the changes off of them.
                 For example, if the player kills an NPC, specify that the NPC's property "isAlive" should be changed to 
                 false. Additionally, mention any consequences, such as other NPCs being informed about the death. If the 
                 task involves repairing a structure like an old bridge, describe the changes, like updating the bridge's 
