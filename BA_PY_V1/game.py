@@ -21,6 +21,7 @@ class Game:
         self.__messages = []
         self.__quests = []
         self.__consequences = []
+        self.__last_queried_triplets = []
         self.SYSTEM_ROLE = "system"
         self.USER_ROLE = "user"
 
@@ -143,6 +144,7 @@ VALUES (?node) {(ex:Stranger)}
                 break
 
         triplets = player_triplets + obj_triplets + node_triplets
+        self.__last_queried_triplets = triplets.copy()
         return triplets
 
     def generate_query_from_types(self, required_nodes):
@@ -167,15 +169,18 @@ VALUES (?node) {(ex:Stranger)}
 
     def generate_query_from_name(self, required_node):
         required_node = required_node.replace(" ", "")
-        head_part = '''
+        response_query = '''
             PREFIX ex: <http://example.org/>
 
             SELECT ?node ?property ?value
-            WHERE {'''
+            WHERE {
+                ?node ?property ?value .
+                FILTER (UCASE(str(?node)) = UCASE(str(ex:''' + required_node + ''')))
+            }'''
         # where_part = f"ex:{required_node} ?property ?value ."
-        where_part = "VALUES (?node) {(ex:" + required_node + ")}"
-        closing_bracket = "?node ?property ?value . }"
-        response_query = f"{head_part}{where_part}{closing_bracket}"
+        # where_part = "VALUES (?node) {(ex:" + required_node + ")}"
+        # closing_bracket = "?node ?property ?value . }"
+        # response_query = f"{head_part}{where_part}{closing_bracket}"
 #
         print(f"\nName-ish node query:\n{response_query}")
 
@@ -274,8 +279,9 @@ VALUES (?node) {(ex:Stranger)}
         validation_msgs = self.__messages.copy()
 
         message = f'''Now only validate if the generated quest, as it is described in the generated structure, is 
-        consistent with the narrative and if it is logical and playable. Here is the generated quest again:
-        \n{generated_quest_structure}'''
+        consistent with the narrative and the queried graph node triplets. Also make sure that it is logical and 
+        playable. Here is the generated quest again:\n{generated_quest_structure}
+        And here are the queried graph node triplets again:\n{self.__last_queried_triplets}'''
 
         validation_msgs.append(Message(message, self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check")
@@ -288,6 +294,8 @@ VALUES (?node) {(ex:Stranger)}
         if valid:
             bg = blazegraph.BlazeGraph(self.__server_address)
             valid = bg.validate_quest(generated_quest_structure) and valid
+
+        self.__last_queried_triplets.clear()
 
         return valid
 
