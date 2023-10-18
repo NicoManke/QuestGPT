@@ -1,19 +1,20 @@
 import os
-import blazegraph
 import game
+from utility import print_response
 
 
 def main():
     game_instance = game.Game(
         os.getenv("OPENAI_API_KEY"),
         "gpt-4",
+        12,
+        10,
         'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
     )
-    bg = blazegraph.BlazeGraph(game_instance.get_server_address())
 
     game_instance.prompt()
     first_response = game_instance.get_response()
-    game_instance.print_response(first_response)
+    print_response(first_response)
 
     print('''\nWelcome to the town of Eich wandering loner! You may now call this your new home. Help the villagers, explore the world and seek new challenges in form of quests.''')
 
