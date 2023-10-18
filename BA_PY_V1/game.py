@@ -143,7 +143,10 @@ VALUES (?node) {(ex:Stranger)}
                 node_triplets = reorder_query_triplets(query_result)
                 break
 
-        triplets = player_triplets + obj_triplets + node_triplets
+        node_set = set(node_triplets)
+        obj_set = set(obj_triplets)
+        combined_set = obj_set.union(node_set)
+        triplets = player_triplets + list(combined_set)
         self.__last_queried_triplets = triplets.copy()
         return triplets
 
@@ -177,18 +180,14 @@ VALUES (?node) {(ex:Stranger)}
                 ?node ?property ?value .
                 FILTER (UCASE(str(?node)) = UCASE(str(ex:''' + required_node + ''')))
             }'''
-        # where_part = f"ex:{required_node} ?property ?value ."
-        # where_part = "VALUES (?node) {(ex:" + required_node + ")}"
-        # closing_bracket = "?node ?property ?value . }"
-        # response_query = f"{head_part}{where_part}{closing_bracket}"
-#
+
         print(f"\nName-ish node query:\n{response_query}")
 
         return response_query
 
     def generate_quest(self, quest_request: str, extracted_nodes):
         msgs = self.__messages.copy()
-        msgs.append(Message(f"Take a deep breath and think about waht should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}", self.USER_ROLE))
+        msgs.append(Message(f"Take a deep breath and think about what should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}", self.USER_ROLE))
         msgs.append(Message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system"))
         request_response = self.__gpt_facade.get_response(msgs, 1.0)  # self.get_response(1.0)
         generated_quest = trim_quest_structure(request_response["choices"][0]["message"]["content"])
