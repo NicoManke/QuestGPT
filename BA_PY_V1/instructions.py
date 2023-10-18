@@ -6,6 +6,8 @@ Set the stage: The player character is a stranger arriving in a village and is d
 
 Apply real-world logic: Craft a story and quest tasks that adhere to existing narrative consistency. For instance, avoid scenarios where an already deceased NPC is killed again. If a logical conflict arises, take a deep breath and think about how you can modify the quest objective, introduce a workaround, implement a plot twist, or make the objective simply not achievable to create a playable quest and maintain consistency.
 
+When presented with multiple possible objectives provided by the queried graph nodes consider choosing only one or just a few of them and leave the remaining ones for later requests.
+
 Handling null values: If a value is null (e.g., if a task lacks an NPC), use "null" as the value in the JSON structure.
 
 Format considerations: Always use double quotes for object keys in the JSON structure as specified. And never use "\\n" for line breaks, since they cause errors in JSON.
