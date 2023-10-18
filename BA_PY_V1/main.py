@@ -27,8 +27,10 @@ def main():
     if game_instance.is_quest_valid(gen_quest):
         gen = game_instance.convert_quest(gen_quest)
     else:
-        print("The Quest wasn't valid, please try again.")
-        return 0
+        print("\nGenerated quest structure needs to be corrected.")
+        gen = game_instance.convert_quest(game_instance.correct_structure(gen_quest))
+
+    game_instance.clear_triplets()
 
     # update graph
     consequences = []
