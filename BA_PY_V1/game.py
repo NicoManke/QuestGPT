@@ -36,7 +36,8 @@ class Game:
         Dragon, Human, Wolf, 
         Item, Weapon, Sword, WarHammer, Apparel, 
         WorldObject,
-        WorldResource
+        WorldResource,
+        Treasure
         '''
 
     def add_message(self, message: str, role: str = "user"):
@@ -138,7 +139,7 @@ VALUES (?node) {(ex:Stranger)}
                 if try_counter == 3:
                     print(f"No valid was generated in {try_counter} tries!")
             else:
-                print(f"\nQuery output vars:\n{query_result['head']['vars']}")
+                print(f"\nQuery output vars: {query_result['head']['vars']}")
                 # remaining code here...?
                 node_triplets = reorder_query_triplets(query_result)
                 break
@@ -180,8 +181,7 @@ VALUES (?node) {(ex:Stranger)}
                 ?node ?property ?value .
                 FILTER (UCASE(str(?node)) = UCASE(str(ex:''' + required_node + ''')))
             }'''
-
-        print(f"\nName-ish node query:\n{response_query}")
+        # print(f"\nName-ish node query:\n{response_query}")
 
         return response_query
 
@@ -194,7 +194,7 @@ VALUES (?node) {(ex:Stranger)}
         self.__quests.append(generated_quest)
         return generated_quest
 
-    def correct_structure(self, invalid_quest_structure: str, error_msg):
+    def correct_error(self, invalid_quest_structure: str, error_msg):
         # do call with command of "repairing" structure
         try_count = 0
 
@@ -202,28 +202,69 @@ VALUES (?node) {(ex:Stranger)}
             print(f"Correction {try_count}")
             try_count += 1
 
-            print(f"An KeyError occurred when accessing the json-loaded quest structure: {error_msg}")
             correction_msgs = self.__messages.copy()
             correction_msgs.append(Message(
                 f'''In the generation of the quest structure an error occurred, see: "{error_msg}".
                     Correct the following quest structure based on the already generated content, the originally 
                     given structure, the narrative and the queried nodes. Here is the incorrect structure:
                     "{invalid_quest_structure}".
+                    And here are the node triplets again: "{self.__last_queried_triplets}".
                     Additionally, check for more structural errors or missing keys and correct them.
                     ''',
                 self.SYSTEM_ROLE
             ))
-            response = self.__gpt_facade.get_response(correction_msgs)
+            response = self.__gpt_facade.get_response(correction_msgs, 0.75)
             corrected_structure = trim_quest_structure(response["choices"][0]["message"]["content"])
 
             try:
-                loaded_corrected_structure = json.loads(corrected_structure)
+                json.loads(corrected_structure)
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"\nAnother Error was still found after {try_count} corrections: {e}")
+                error_msg = e
                 if try_count > 2:
                     break
             else:
-                return loaded_corrected_structure
+                return corrected_structure
+
+    def correct_structure(self, generated_quest_structure):
+        counter = 0
+        while True:
+            try:
+                json_quest = json.loads(f'{generated_quest_structure}')
+            except json.JSONDecodeError as jde:
+                counter += 1
+                print(f"A JSON decode Error occurred. Correction-try: {counter}")
+                generated_quest_structure = self.correct_error(generated_quest_structure, jde)
+            except Exception as e:
+                counter += 1
+                print(f"The structure wasn't correctly formatted. Correction-try: {counter}")
+                generated_quest_structure = self.correct_error(generated_quest_structure, e)
+            else:
+                break
+
+        counter = 0
+        while True:
+            try:
+                q_sub_tasks = json_quest["SubTasks"]
+                for task in q_sub_tasks:
+                    task_consequences = task["Task_Consequences"]
+                    for des in task_consequences:
+                        print(f"\nC.D: {des}")
+                        self.create_consequence(des)
+            except KeyError as ke:
+                counter += 1
+                print(
+                    f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\nRe-try: {counter}")
+                generated_quest_structure = self.correct_error(generated_quest_structure, ke)
+            except Exception as e:
+                counter += 1
+                print(
+                    f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\nRe-try: {counter}")
+                generated_quest_structure = self.correct_error(generated_quest_structure, e)
+            else:
+                break
+
+        return generated_quest_structure
 
     def is_quest_valid(self, generated_quest_structure: str):
         # checking if there is any structure
@@ -233,28 +274,44 @@ VALUES (?node) {(ex:Stranger)}
             # back into the quest-generation for a 2nd round
             return False
 
-        try:
-            json_quest = json.loads(f'{generated_quest_structure}')
-        except Exception as e:
-            print("The structure wasn't correctly formatted. (Maybe try correcting the structure...")
-            print(f"See the error message:\n{e}")
-            return False
+        # counter = 0
+        while True:
+            try:
+                json_quest = json.loads(f'{generated_quest_structure}')
+            except json.JSONDecodeError as jde:
+                # counter += 1
+                print(f"A JSON decode Error occurred. Correction-try: ")
+                return False
+                # generated_quest_structure = self.correct_structure(generated_quest_structure, jde)
+            except Exception as e:
+                # counter += 1
+                print(f"The structure wasn't correctly formatted. Correction-try: ")
+                return False
+                # generated_quest_structure = self.correct_structure(generated_quest_structure, e)
+            else:
+                break
 
-        try:
-            q_sub_tasks = json_quest["SubTasks"]
-            for task in q_sub_tasks:
-                task_consequences = task["Task_Consequences"]
-                for des in task_consequences:
-                    print(f"\nC.D: {des}")
-                    self.create_consequence(des)
-        except KeyError as ke:
-            print(f"An KeyError occurred when accessing the json-loaded quest structure: {ke}")
-            generated_quest_structure = self.correct_structure(generated_quest_structure, ke)
-            # still misses conversion of task_consequences
-        except Exception as e:
-            print(f"Another error occurred when accessing the json-loaded quest structure: {e}")
-            generated_quest_structure = self.correct_structure(generated_quest_structure, e)
-            # still misses conversion of task_consequences
+        # counter = 0
+        while True:
+            try:
+                q_sub_tasks = json_quest["SubTasks"]
+                for task in q_sub_tasks:
+                    task_consequences = task["Task_Consequences"]
+                    for des in task_consequences:
+                        print(f"\nC.D: {des}")
+                        self.create_consequence(des)
+            except KeyError as ke:
+                # counter += 1
+                print(f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\nRe-try: ")
+                return False
+                # generated_quest_structure = self.correct_structure(generated_quest_structure, ke)
+            except Exception as e:
+                # counter += 1
+                print(f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\nRe-try: ")
+                return False
+                # generated_quest_structure = self.correct_structure(generated_quest_structure, e)
+            else:
+                break
 
         validity_function = [{
             "name": "validity_check",
@@ -274,7 +331,6 @@ VALUES (?node) {(ex:Stranger)}
             }
         }]
 
-        # separate copy of the original conversation
         validation_msgs = self.__messages.copy()
 
         message = f'''Now only validate if the generated quest, as it is described in the generated structure, is 
@@ -286,21 +342,22 @@ VALUES (?node) {(ex:Stranger)}
         response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check")
 
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
-        args = response_arguments.get("is_quest_valid")
-        print(f"\nArgs:\n{response_arguments}")
-        valid = args
+        valid = response_arguments.get("is_quest_valid")
+        explanation = response_arguments.get("validity_explanation")
+        print(f"\nQuest Validation:\n{valid}\n{explanation}")
 
-        if valid:
-            bg = blazegraph.BlazeGraph(self.__server_address)
-            valid = bg.validate_quest(generated_quest_structure) and valid
-
-        self.__last_queried_triplets.clear()
+        #if valid:
+        #    valid = self.__bg.validate_quest(generated_quest_structure) and valid
 
         return valid
+
+    def clear_triplets(self):
+        self.__last_queried_triplets.clear()
 
     def convert_quest(self, quest_structure: str):
         # something's not correct yet...
         json_quest = json.loads(f'{quest_structure}')
+        # print(f"Debug JSON quest:\n{json_quest}")
         q_name = json_quest["Name"]
         q_description = json_quest["Detailed_Description"]
         q_s_description = json_quest["Short_Description"]
@@ -321,15 +378,26 @@ VALUES (?node) {(ex:Stranger)}
         sparql_pattern = "DELETE {} INSERT {} WHERE {}"
         optional_block = "OPTIONAL {}"
 
+        predicates = self.__bg.query('''
+            PREFIX ex: <http://example.org/>
+
+            SELECT DISTINCT ?predicate
+            WHERE {
+                ?subject ?predicate ?object
+            }''')
+        predicates = reorder_query_triplets(predicates)
+
         for cons in consequences:
             message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
             "{node_triplets}".\n
             In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
-            graph. Your task is to craft only one single SparQL query that logically updates the relevant triplets 
-            influenced by these consequences. Differentiate between changes that are essential for the graph and those that 
-            serve purely narrative purposes. Ensure that node deletion is minimal, focusing on removing and changing only 
-            specific attributes when necessary. Note that the query is solely intended for graph updates and does not 
-            require condition checking. Refrain from deleting entire nodes. 
+            graph. Your task is to craft only one single SparQL query, based on the given triplets, that logically 
+            updates the relevant triplets influenced by these consequences. Differentiate between changes that are 
+            essential for the graph and those that serve purely narrative purposes. Ensure that node deletion is minimal
+            , focusing on removing and changing only specific attributes when necessary. Note that the query is solely 
+            intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
+            Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
+            ones. Below is a comprehensive list of the available predicates:\n{predicates}
             Here are the task consequences:
             "{cons}".\n
             When generating the query, please use the following pattern for the query:
