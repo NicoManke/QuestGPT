@@ -24,11 +24,13 @@ def main():
 
     gen_quest = game_instance.generate_quest(user_request, extracted_nodes)
 
+    gen_quest = game_instance.correct_structure(gen_quest)
+
     if game_instance.is_quest_valid(gen_quest):
         gen = game_instance.convert_quest(gen_quest)
     else:
-        print("\nGenerated quest structure needs to be corrected.")
-        gen = game_instance.convert_quest(game_instance.correct_structure(gen_quest))
+        print("\nGenerated quest was not valid.")
+        # gen = game_instance.convert_quest()
 
     game_instance.clear_triplets()
 

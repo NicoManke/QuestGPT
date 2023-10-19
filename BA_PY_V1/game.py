@@ -248,9 +248,8 @@ VALUES (?node) {(ex:Stranger)}
                 q_sub_tasks = json_quest["SubTasks"]
                 for task in q_sub_tasks:
                     task_consequences = task["Task_Consequences"]
-                    for des in task_consequences:
-                        print(f"\nC.D: {des}")
-                        self.create_consequence(des)
+                    #for des in task_consequences:
+                        #self.create_consequence(des)
             except KeyError as ke:
                 counter += 1
                 print(
@@ -274,24 +273,18 @@ VALUES (?node) {(ex:Stranger)}
             # back into the quest-generation for a 2nd round
             return False
 
-        # counter = 0
         while True:
             try:
                 json_quest = json.loads(f'{generated_quest_structure}')
             except json.JSONDecodeError as jde:
-                # counter += 1
-                print(f"A JSON decode Error occurred. Correction-try: ")
+                print(f"A JSON decode Error occurred: {jde}")
                 return False
-                # generated_quest_structure = self.correct_structure(generated_quest_structure, jde)
             except Exception as e:
-                # counter += 1
-                print(f"The structure wasn't correctly formatted. Correction-try: ")
+                print(f"The structure wasn't correctly formatted: {e}")
                 return False
-                # generated_quest_structure = self.correct_structure(generated_quest_structure, e)
             else:
                 break
 
-        # counter = 0
         while True:
             try:
                 q_sub_tasks = json_quest["SubTasks"]
@@ -299,17 +292,13 @@ VALUES (?node) {(ex:Stranger)}
                     task_consequences = task["Task_Consequences"]
                     for des in task_consequences:
                         print(f"\nC.D: {des}")
-                        self.create_consequence(des)
+                        #self.create_consequence(des)
             except KeyError as ke:
-                # counter += 1
-                print(f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\nRe-try: ")
+                print(f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\n")
                 return False
-                # generated_quest_structure = self.correct_structure(generated_quest_structure, ke)
             except Exception as e:
-                # counter += 1
-                print(f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\nRe-try: ")
+                print(f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\n")
                 return False
-                # generated_quest_structure = self.correct_structure(generated_quest_structure, e)
             else:
                 break
 
@@ -345,9 +334,6 @@ VALUES (?node) {(ex:Stranger)}
         valid = response_arguments.get("is_quest_valid")
         explanation = response_arguments.get("validity_explanation")
         print(f"\nQuest Validation:\n{valid}\n{explanation}")
-
-        #if valid:
-        #    valid = self.__bg.validate_quest(generated_quest_structure) and valid
 
         return valid
 
@@ -387,7 +373,9 @@ VALUES (?node) {(ex:Stranger)}
             }''')
         predicates = reorder_query_triplets(predicates)
 
+        #last_consequences = []
         for cons in consequences:
+            #last_consequences.append(cons)
             message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
             "{node_triplets}".\n
             In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
@@ -398,7 +386,7 @@ VALUES (?node) {(ex:Stranger)}
             intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
             Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
             ones. Below is a comprehensive list of the available predicates:\n{predicates}
-            Here are the task consequences:
+            Here is the task consequence:
             "{cons}".\n
             When generating the query, please use the following pattern for the query:
             "{sparql_pattern}".\n
