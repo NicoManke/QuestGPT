@@ -4,6 +4,7 @@ import openai_facade
 import quest
 import consequence
 import blazegraph
+from pymantic import sparql
 from utility import create_message as Message
 from utility import trim_quest_structure
 from utility import reorder_query_triplets
@@ -60,6 +61,10 @@ class Game:
         self.add_message(instructions.get_instructions(), self.SYSTEM_ROLE)
         # make response only on request
         self.add_message(instructions.get_command(), self.SYSTEM_ROLE)
+
+    def reset_graph(self):
+        self.__bg.clear_graph()
+        self.__bg.load_graph()
 
     def get_graph_knowledge(self, request: str):
         msgs = []
@@ -189,7 +194,6 @@ VALUES (?node) {(ex:Stranger)}
                 ?node ?property ?value .
                 FILTER (UCASE(str(?node)) = UCASE(str(ex:''' + required_node + ''')))
             }'''
-        # print(f"\nName-ish node query:\n{response_query}")
 
         return response_query
 
@@ -286,31 +290,27 @@ WHERE {
                 counter += 1
                 print(f"A JSON decode Error occurred. Correction-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, jde)
+                continue
             except Exception as e:
                 counter += 1
                 print(f"The structure wasn't correctly formatted. Correction-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, e)
-            else:
-                break
+                continue
 
-        counter = 0
-        while True:
             try:
                 q_sub_tasks = json_quest["SubTasks"]
                 for task in q_sub_tasks:
                     task_consequences = task["Task_Consequences"]
-                    #for des in task_consequences:
-                        #self.create_consequence(des)
             except KeyError as ke:
                 counter += 1
-                print(
-                    f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\nRe-try: {counter}")
+                print(f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\nRe-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, ke)
+                continue
             except Exception as e:
                 counter += 1
-                print(
-                    f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\nRe-try: {counter}")
+                print(f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\nRe-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, e)
+                continue
             else:
                 break
 
@@ -424,9 +424,7 @@ WHERE {
             }''')
         predicates = reorder_query_triplets(predicates)
 
-        #last_consequences = []
         for cons in consequences:
-            #last_consequences.append(cons)
             message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
             "{node_triplets}".\n
             In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
@@ -436,10 +434,13 @@ WHERE {
             , focusing on removing and changing only specific attributes when necessary. Note that the query is solely 
             intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
             Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
-            ones. Below is a comprehensive list of the available predicates:\n{predicates}
+            ones. Take a step back and think about every predicates true meaning, so you can apply them truthfully and 
+             don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
+             {predicates}
             Here is the task consequence:
             "{cons}".\n
-            When generating the query, please use the following pattern for the query:
+            When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
+            and please use the following pattern for the query:
             "{sparql_pattern}".\n
             You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
             first time the triple is set.
@@ -452,13 +453,21 @@ WHERE {
 
             update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
             response = self.__gpt_facade.get_response(update_graph_msgs)
-            update_queries.append(response["choices"][0]["message"]["content"])
+            update_queries.append(correct_query(response["choices"][0]["message"]["content"]))
             usage = response["usage"]
             print(f"\nToken Info: \n{usage}")
 
-        # instead actually update the graph...
         print(f"\nUpdate Queries:")
         i: int = 1
         for upt_query in update_queries:
             print(f"U.Q. {i}:\n{upt_query}")
+            try:
+                self.__bg.update(upt_query)
+            except sparql.SPARQLQueryException:
+                upt_query = correct_query(upt_query)
+                self.__bg.update(upt_query)
             i += 1
+
+        print("\nReseting the graph...")
+        self.__bg.reset_graph()
+
