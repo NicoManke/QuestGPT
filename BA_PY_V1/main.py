@@ -30,6 +30,7 @@ def main():
         gen = game_instance.convert_quest(gen_quest)
     else:
         print("\nGenerated quest was not valid.")
+        return 0
         # gen = game_instance.convert_quest()
 
     game_instance.clear_triplets()

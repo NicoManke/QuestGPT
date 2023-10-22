@@ -110,6 +110,7 @@ class Game:
 
     def query_nodes(self, required_nodes: [], required_objective: str):
         obj_triplets = []
+        deeper_obj_triplets = []
         node_triplets = []
 
         player_query_results = self.__bg.query('''
@@ -127,6 +128,13 @@ VALUES (?node) {(ex:Stranger)}
             obj_query_result = self.__bg.query(objective_query)
             obj_triplets = reorder_query_triplets(obj_query_result)
 
+            deeper_search_queries = self.generate_query_from_attributes(obj_triplets)
+
+            for query in deeper_search_queries:
+                triplets = reorder_query_triplets(self.__bg.query(query))
+                for triplet in triplets:
+                    deeper_obj_triplets.append(triplet)
+
         # multiple tries, because the query generation tends to be not 100% valid
         try_counter = 0
         while try_counter < 3:
@@ -135,18 +143,18 @@ VALUES (?node) {(ex:Stranger)}
             try:
                 query_result = self.__bg.query(response_query)
             except Exception as e:
-                print(f"\nInvalid query! #Tries: {try_counter}")
+                print(f"\nInvalid query! #Tries: {try_counter}!\nError: {e}")
                 if try_counter == 3:
                     print(f"No valid was generated in {try_counter} tries!")
             else:
-                print(f"\nQuery output vars: {query_result['head']['vars']}")
-                # remaining code here...?
                 node_triplets = reorder_query_triplets(query_result)
                 break
 
         node_set = set(node_triplets)
         obj_set = set(obj_triplets)
+        deeper_set = set(deeper_obj_triplets)
         combined_set = obj_set.union(node_set)
+        combined_set = combined_set.union(deeper_set)
         triplets = player_triplets + list(combined_set)
         self.__last_queried_triplets = triplets.copy()
         return triplets
@@ -184,6 +192,49 @@ VALUES (?node) {(ex:Stranger)}
         # print(f"\nName-ish node query:\n{response_query}")
 
         return response_query
+
+    def generate_query_from_attributes(self, specific_node_triplets):
+        msgs = []
+        query_nodes_function = [{
+            "name": "dummy_query_nodes",
+            "description": "Queries the nodes from a knowledge graph based on given node names.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "required_nodes": {
+                        "type": "string",
+                        "description": "An array of strings naming the nodes that should be queried from a knowledge graph.",
+                    }
+                }, "required": ["required_nodes"],
+            }
+        }]
+        msgs.append(Message(
+            f"Here is a list of rdf triplets describing an already queried node and its attributes: {specific_node_triplets}",
+            self.SYSTEM_ROLE))
+        msgs.append(Message(
+            f"Now select the triplets' objects that should be leading to another node instance providing more information from the graph. Avoid selecting types and labels. Select only values that lead to other nodes.",
+            self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(msgs, query_nodes_function, "dummy_query_nodes")
+
+        response_message = response["choices"][0]["message"]
+
+        function_args = json.loads(response_message["function_call"]["arguments"])
+        print(f"\nArgs (deeper nodes): {function_args}")
+
+        required_nodes_list = function_args.get("required_nodes").split(', ')
+        queries = []
+        for node in required_nodes_list:
+            query = '''PREFIX ex: <http://example.org/>
+
+SELECT ?subject ?property ?value
+WHERE {
+  ?subject ?property ?value .
+  FILTER (?subject = ex:''' + node + ''')
+}
+'''
+            queries.append(query)
+
+        return queries
 
     def generate_quest(self, quest_request: str, extracted_nodes):
         msgs = self.__messages.copy()
