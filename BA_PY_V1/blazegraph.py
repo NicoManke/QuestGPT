@@ -26,6 +26,3 @@ class BlazeGraph:
     def reset_graph(self):
         self.clear_graph()
         self.load_graph()
-
-    def validate_quest(self, quest):
-        return True

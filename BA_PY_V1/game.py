@@ -41,6 +41,148 @@ class Game:
         Treasure
         '''
 
+    def run(self):
+        self.prompt()
+        first_response = self.get_response()
+        print_response(first_response)
+
+        print('''\nWelcome to the town of Eich wandering loner! You may now call this your new home. Help the villagers, 
+explore the world and seek new challenges in form of quests.''')
+
+        while True:
+            user_answer = input("\nWhat do you want to do? Explore, request a quest, go on a quest or do you want to quit?")
+            chosen_path = self.choose_path(user_answer)
+            print(f"Chosen Path: {chosen_path}")
+
+            if chosen_path == "explore":
+                self.handle_exploration()
+            elif chosen_path == "quest_generation":
+                self.handle_quest_request()
+            elif chosen_path == "quest_progressing":
+                self.handle_quest_progression()
+            elif chosen_path == "quit":
+                print("\nResetting the graph...")
+                self.__bg.reset_graph()
+                print("\nQuitting game...")
+                break
+            elif chosen_path == "undefined":
+                print("\nYour request can't be realized! Let's try again...")
+                continue
+            else:
+                print("\nAn error occurred! Let's try again...")
+                continue
+
+    def choose_path(self, user_request: str):
+        decision_msgs = []
+        dummy_functions = [{
+            "name": "path_selection",
+            "description": "Decides based on the provided enum which path the game loop should step in.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selected_path": {
+                        "type": "string",
+                        "enum": ["explore", "quest_generation", "quest_progressing", "quit", "undefined"],
+                        "description": '''The path that should be chosen. 
+                        "explore" if the player wants to continue exploring, 
+                        "quest_generation" if he requests a new quest,
+                        "quest_progression" if he wants to go on a quest,
+                        "quit" if he wants to quit the game, 
+                        and "undefined" if you can't assign one of the other options.''',
+                    }
+                }, "required": ["selected_path"],
+            }
+        }]
+
+        message = f'''The player was asked what he wants to do and this was his answer: "{user_request}". 
+                Now decide based on his answer if the player wants to continue exploring, if he requests a new quest, if 
+                he wants to play an already generated quest, or if he wants to quit the game completely.'''
+
+        decision_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(decision_msgs, dummy_functions, "path_selection")
+
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        path = response_arguments.get("selected_path")
+
+        return path
+
+    def handle_quest_request(self):
+        user_request = input("\nPlease tell us what quest you want to play.")
+
+        extracted_nodes = self.get_graph_knowledge(user_request)
+
+        gen_quest = self.generate_quest(user_request, extracted_nodes)
+
+        gen_quest = self.correct_structure(gen_quest)
+
+        if self.is_quest_valid(gen_quest):
+            gen = self.convert_quest(gen_quest)
+            self.__quests.append(gen)
+            consequences = []
+            for st in gen.sub_tasks:
+                for cons in st["Task_Consequences"]:
+                    consequences.append(cons["Description"])
+            self.update_graph(consequences, extracted_nodes)
+
+            print(f"\nHere is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
+        else:
+            print("\nGenerated quest was not valid!")
+
+        self.clear_triplets()
+
+    def handle_quest_progression(self):
+        if len(self.__quests) == 0:
+            alternative_selection = input("Sorry, there are currently no quests available. Do you want to request a quest or to explore the world?")
+
+            # change state based on alt selection or return to loop beginning
+        else:
+            quest_selection = "What quest do you want to play? Here are your options:"
+            quest_number = 1
+            for quest_option in self.__quests:
+                quest_selection = f"{quest_selection}\n{quest_number}. Name: {quest_option.name}.\n Desc: {quest_option.description}."
+
+            selected_quest = input(quest_selection)
+
+            # select and start quest
+            current_quest = self.__quests.__getitem__(0)
+
+            current_task_index = 0
+            while True:
+                # start task 1
+                current_task = current_quest.sub_tasks.__getitem__(current_task_index)
+
+                while True:
+
+                    # if done...
+                    break
+
+                # progress... loop...
+                current_task_index += 1
+
+                # finish
+                break
+
+    def handle_exploration(self):
+        while True:
+            next_action = input("What do you want to do next?")
+            # verarbeitung next action -> possible or not-possible?
+            if self.continue_exploring(next_action):
+                print("\"Feedback to your actions...\"")
+                # function call that returns a bool and a Description...
+                # valid = ...
+                # desc = ...
+                # if valid:
+                #    print()
+                #    optional graph update
+                #    updating generated quests ? How ?!
+                # else:
+                #    say that the action can't be performed
+                # repeat until player wants to do or request a quest
+                continue
+            else:
+                print("Finish exploring...")
+                break
+
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
             {"role": role,
@@ -61,6 +203,36 @@ class Game:
         self.add_message(instructions.get_instructions(), self.SYSTEM_ROLE)
         # make response only on request
         self.add_message(instructions.get_command(), self.SYSTEM_ROLE)
+
+    def continue_exploring(self, user_request: str):
+        decision_msgs = []
+        dummy_functions = [{
+            "name": "validity_check",
+            "description": "Decides based on the provided player decision of what to do next, if he wants to continue exploring or if he wants to stop and do something else.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "continue_exploring": {
+                        "type": "boolean",
+                        "description": "True if the wants to continue exploring.",
+                    }
+                }, "required": ["continue_exploring"],
+            }
+        }]
+
+        message = f'''The player was asked what he wants to do next and this was his answer: "{user_request}". 
+        Now decide based on his answer if the player wants to continue exploring, or if he wants to quit exploring. 
+        Generally, you can check if the player explicitly wants to quit exploring or if he specifically asks for 
+        starting or generating a quest. If his answer suggests that he wants to perform some actions, it can be assumed
+        he wants to continue exploring.'''
+
+        decision_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(decision_msgs, dummy_functions, "validity_check")
+
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        keep_exploring = response_arguments.get("continue_exploring")
+
+        return keep_exploring
 
     def reset_graph(self):
         self.__bg.clear_graph()
@@ -391,10 +563,8 @@ WHERE {
     def clear_triplets(self):
         self.__last_queried_triplets.clear()
 
-    def convert_quest(self, quest_structure: str):
-        # something's not correct yet...
-        json_quest = json.loads(f'{quest_structure}')
-        # print(f"Debug JSON quest:\n{json_quest}")
+    def convert_quest(self, generated_structure: str):
+        json_quest = json.loads(f'{generated_structure}')
         q_name = json_quest["Name"]
         q_description = json_quest["Detailed_Description"]
         q_s_description = json_quest["Short_Description"]
@@ -467,7 +637,3 @@ WHERE {
                 upt_query = correct_query(upt_query)
                 self.__bg.update(upt_query)
             i += 1
-
-        print("\nReseting the graph...")
-        self.__bg.reset_graph()
-
