@@ -4,11 +4,13 @@ import openai_facade
 import quest
 import consequence
 import blazegraph
+import color_console
+from pymantic import sparql
 from utility import create_message as Message
 from utility import trim_quest_structure
 from utility import reorder_query_triplets
 from utility import correct_query
-from utility import print_response
+
 
 import narrative
 import quest_structure
@@ -29,6 +31,7 @@ class Game:
 
         self.__server_address = server_address
         self.__bg = blazegraph.BlazeGraph(self.__server_address)
+        self.__coco = color_console.ColorConsole()
 
         # node graph node types here; currently just selected examples
         self.__node_types = '''
@@ -39,6 +42,152 @@ class Game:
         WorldResource,
         Treasure
         '''
+
+    def run(self):
+        self.prompt()
+        first_response = self.get_response()
+        self.__coco.coco_print(f'''{first_response["choices"][0]["message"]["content"]}''')
+
+        self.__coco.coco_game('''Welcome to the town of Eich wandering loner! You may now call this your new home. Help the villagers, explore the world and seek new challenges in form of quests.''')
+
+        while True:
+            user_answer = self.__coco.coco_input("What do you want to do? Explore, request a quest, go on a quest or do you want to quit?")
+            chosen_path = self.choose_path(user_answer)
+            self.__coco.coco_debug(f"Chosen Path: {chosen_path}")
+
+            if chosen_path == "explore":
+                self.handle_exploration()
+            elif chosen_path == "quest_generation":
+                self.handle_quest_request()
+            elif chosen_path == "quest_progressing":
+                self.handle_quest_progression()
+            elif chosen_path == "quit":
+                self.__coco.coco_print("Resetting the graph...")
+                self.__bg.reset_graph()
+                self.__coco.coco_print("Quitting game...")
+                break
+            elif chosen_path == "undefined":
+                self.__coco.coco_print("Your request can't be realized! Let's try again...")
+                continue
+            else:
+                self.__coco.coco_print("An error occurred! Let's try again...")
+                continue
+
+    def choose_path(self, user_request: str):
+        decision_msgs = []
+        dummy_functions = [{
+            "name": "path_selection",
+            "description": "Decides based on the provided enum which path the game loop should step in.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selected_path": {
+                        "type": "string",
+                        "enum": ["explore", "quest_generation", "quest_progressing", "quit", "undefined"],
+                        "description": '''The path that should be chosen. 
+                        "explore" if the player wants to continue exploring, 
+                        "quest_generation" if he requests a new quest,
+                        "quest_progression" if he wants to go on a quest,
+                        "quit" if he wants to quit the game, 
+                        and "undefined" if you can't assign one of the other options.''',
+                    }
+                }, "required": ["selected_path"],
+            }
+        }]
+
+        message = f'''The player was asked what he wants to do and this was his answer: "{user_request}". 
+                Now decide based on his answer if the player wants to continue exploring, if he requests a new quest, if 
+                he wants to play an already generated quest, or if he wants to quit the game completely.'''
+
+        decision_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(decision_msgs, dummy_functions, "path_selection", 0.1)
+
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        path = response_arguments.get("selected_path")
+
+        return path
+
+    def handle_quest_request(self):
+        while True:
+            user_request = self.__coco.coco_input("Please tell us what quest you want to play.")
+
+            extracted_nodes = self.get_graph_knowledge(user_request)
+
+            gen_quest = self.generate_quest(user_request, extracted_nodes)
+
+            gen_quest = self.correct_structure(gen_quest)
+
+            if self.is_quest_valid(gen_quest):
+                gen = self.convert_quest(gen_quest)
+                self.__quests.append(gen)
+                consequences = []
+                for st in gen.sub_tasks:
+                    for cons in st["Task_Consequences"]:
+                        consequences.append(cons["Description"])
+                self.update_graph(consequences, extracted_nodes)
+
+                self.__coco.coco_game(f"Here is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
+                self.clear_triplets()
+                break
+            else:
+                self.__coco.coco_print("Generated quest was not valid!")
+                self.clear_triplets()
+                continue
+
+
+
+    def handle_quest_progression(self):
+        if len(self.__quests) == 0:
+            alternative_selection = self.__coco.coco_input("Sorry, there are currently no quests available. Do you want to request a quest or to explore the world?")
+
+            # change state based on alt selection or return to loop beginning
+        else:
+            quest_selection = "What quest do you want to play? Here are your options:"
+            quest_number = 1
+            for quest_option in self.__quests:
+                quest_selection = f"{quest_selection}\n{quest_number}. Name: {quest_option.name}.\n Desc: {quest_option.description}."
+                quest_number += 1
+            selected_quest = self.__coco.coco_input(quest_selection)
+
+            # select and start quest
+            current_quest = self.__quests.__getitem__(0)
+
+            current_task_index = 0
+            while True:
+                # start task 1
+                current_task = current_quest.sub_tasks.__getitem__(current_task_index)
+
+                while True:
+
+                    # if done...
+                    break
+
+                # progress... loop...
+                current_task_index += 1
+
+                # finish
+                break
+
+    def handle_exploration(self):
+        while True:
+            next_action = self.__coco.coco_input("What do you want to do next?")
+            # verarbeitung next action -> possible or not-possible?
+            if self.continue_exploring(next_action):
+                self.__coco.coco_game("\"Feedback to your actions...\"")
+                # function call that returns a bool and a Description...
+                # valid = ...
+                # desc = ...
+                # if valid:
+                #    print()
+                #    optional graph update
+                #    updating generated quests ? How ?!
+                # else:
+                #    say that the action can't be performed
+                # repeat until player wants to do or request a quest
+                continue
+            else:
+                self.__coco.coco_game("Finish exploring...")
+                break
 
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
@@ -60,6 +209,40 @@ class Game:
         self.add_message(instructions.get_instructions(), self.SYSTEM_ROLE)
         # make response only on request
         self.add_message(instructions.get_command(), self.SYSTEM_ROLE)
+
+    def continue_exploring(self, user_request: str):
+        decision_msgs = []
+        dummy_functions = [{
+            "name": "keep_exploring_check",
+            "description": "Decides based on the provided player decision of what to do next, if he wants to continue exploring or if he wants to stop and do something else.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "continue_exploring": {
+                        "type": "boolean",
+                        "description": "True if the wants to continue exploring, false if he wants to start or request a quest or if he wants to quit the game.",
+                    }
+                }, "required": ["continue_exploring"],
+            }
+        }]
+
+        message = f'''The player was asked what he wants to do next and this was his answer: "{user_request}". 
+        Now decide based on his answer if the player wants to continue exploring, or if he wants to quit exploring. 
+        Generally, you can check if the player explicitly wants to quit exploring or if he specifically asks for 
+        starting or generating a quest. If his answer suggests that he wants to perform some actions, it can be assumed
+        he wants to continue exploring.'''
+
+        decision_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(decision_msgs, dummy_functions, "keep_exploring_check", 0.25)
+
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        keep_exploring = response_arguments.get("continue_exploring")
+
+        return keep_exploring
+
+    def reset_graph(self):
+        self.__bg.clear_graph()
+        self.__bg.load_graph()
 
     def get_graph_knowledge(self, request: str):
         msgs = []
@@ -100,7 +283,7 @@ class Game:
             function_name = response_message["function_call"]["name"]
             function_to_call = available_functions[function_name]
             function_args = json.loads(response_message["function_call"]["arguments"])
-            print(f"\nArgs: {function_args}")
+            self.__coco.coco_debug(f"Args: {function_args}")
             # this is the output of the actual function
             queried_nodes = function_to_call(
                 required_nodes=function_args.get("required_nodes"),
@@ -143,9 +326,9 @@ VALUES (?node) {(ex:Stranger)}
             try:
                 query_result = self.__bg.query(response_query)
             except Exception as e:
-                print(f"\nInvalid query! #Tries: {try_counter}!\nError: {e}")
+                self.__coco.coco_debug(f"Invalid query! #Tries: {try_counter}!\nError: {e}")
                 if try_counter == 3:
-                    print(f"No valid was generated in {try_counter} tries!")
+                    self.__coco.coco_print(f"No valid query was generated in {try_counter} tries!")
             else:
                 node_triplets = reorder_query_triplets(query_result)
                 break
@@ -175,7 +358,7 @@ VALUES (?node) {(ex:Stranger)}
         response = self.__gpt_facade.get_response(msgs)
         response_query = correct_query(response["choices"][0]["message"]["content"])
 
-        print(f"\nType-ish node query:\n{response_query}")
+        self.__coco.coco_debug(f"Type-ish node query:\n{response_query}")
 
         return response_query
 
@@ -189,7 +372,6 @@ VALUES (?node) {(ex:Stranger)}
                 ?node ?property ?value .
                 FILTER (UCASE(str(?node)) = UCASE(str(ex:''' + required_node + ''')))
             }'''
-        # print(f"\nName-ish node query:\n{response_query}")
 
         return response_query
 
@@ -219,7 +401,7 @@ VALUES (?node) {(ex:Stranger)}
         response_message = response["choices"][0]["message"]
 
         function_args = json.loads(response_message["function_call"]["arguments"])
-        print(f"\nArgs (deeper nodes): {function_args}")
+        self.__coco.coco_debug(f"Args (deeper nodes): {function_args}")
 
         required_nodes_list = function_args.get("required_nodes").split(', ')
         queries = []
@@ -242,15 +424,16 @@ WHERE {
         msgs.append(Message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system"))
         request_response = self.__gpt_facade.get_response(msgs, 1.0)  # self.get_response(1.0)
         generated_quest = trim_quest_structure(request_response["choices"][0]["message"]["content"])
-        self.__quests.append(generated_quest)
+        self.__coco.coco_debug(generated_quest)
+        #self.__quests.append(generated_quest)
         return generated_quest
 
     def correct_error(self, invalid_quest_structure: str, error_msg):
         # do call with command of "repairing" structure
-        try_count = 0
+        try_count = 1
 
         while True:
-            print(f"Correction {try_count}")
+            self.__coco.coco_debug(f"Correction {try_count}")
             try_count += 1
 
             correction_msgs = self.__messages.copy()
@@ -270,7 +453,7 @@ WHERE {
             try:
                 json.loads(corrected_structure)
             except Exception as e:
-                print(f"\nAnother Error was still found after {try_count} corrections: {e}")
+                self.__coco.coco_debug(f"Another Error was still found after {try_count} corrections: {e}")
                 error_msg = e
                 if try_count > 2:
                     break
@@ -284,33 +467,29 @@ WHERE {
                 json_quest = json.loads(f'{generated_quest_structure}')
             except json.JSONDecodeError as jde:
                 counter += 1
-                print(f"A JSON decode Error occurred. Correction-try: {counter}")
+                self.__coco.coco_debug(f"A JSON decode Error occurred. Correction-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, jde)
+                continue
             except Exception as e:
                 counter += 1
-                print(f"The structure wasn't correctly formatted. Correction-try: {counter}")
+                self.__coco.coco_debug(f"The structure wasn't correctly formatted. Correction-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, e)
-            else:
-                break
+                continue
 
-        counter = 0
-        while True:
             try:
                 q_sub_tasks = json_quest["SubTasks"]
                 for task in q_sub_tasks:
                     task_consequences = task["Task_Consequences"]
-                    #for des in task_consequences:
-                        #self.create_consequence(des)
             except KeyError as ke:
                 counter += 1
-                print(
-                    f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\nRe-try: {counter}")
+                self.__coco.coco_debug(f"An KeyError occurred when accessing the json-loaded quest structure:\n{ke}\nRe-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, ke)
+                continue
             except Exception as e:
                 counter += 1
-                print(
-                    f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\nRe-try: {counter}")
+                self.__coco.coco_debug(f"Another error occurred when accessing the json-loaded quest structure:\n{e}\nRe-try: {counter}")
                 generated_quest_structure = self.correct_error(generated_quest_structure, e)
+                continue
             else:
                 break
 
@@ -319,7 +498,7 @@ WHERE {
     def is_quest_valid(self, generated_quest_structure: str):
         # checking if there is any structure
         if generated_quest_structure.find("{") == -1 or generated_quest_structure.find("}") == -1:
-            print(f"Quest wasn't generated:\n{generated_quest_structure}")
+            self.__coco.coco_debug(f"Quest wasn't generated:\n{generated_quest_structure}")
             # there is probably a new recommendation in the given answer, so it may be a good idea to re-feed the answer
             # back into the quest-generation for a 2nd round
             return False
@@ -328,10 +507,10 @@ WHERE {
             try:
                 json_quest = json.loads(f'{generated_quest_structure}')
             except json.JSONDecodeError as jde:
-                print(f"A JSON decode Error occurred: {jde}")
+                self.__coco.coco_debug(f"A JSON decode Error occurred: {jde}")
                 return False
             except Exception as e:
-                print(f"The structure wasn't correctly formatted: {e}")
+                self.__coco.coco_debug(f"The structure wasn't correctly formatted: {e}")
                 return False
             else:
                 break
@@ -342,13 +521,12 @@ WHERE {
                 for task in q_sub_tasks:
                     task_consequences = task["Task_Consequences"]
                     for des in task_consequences:
-                        print(f"\nC.D: {des}")
-                        #self.create_consequence(des)
+                        self.__coco.coco_debug(f"\nC.D: {des}")
             except KeyError as ke:
-                print(f"\nAn KeyError occurred when accessing the json-loaded quest structure:\n{ke}\n")
+                self.__coco.coco_debug(f"An KeyError occurred when accessing the json-loaded quest structure:\n{ke}\n")
                 return False
             except Exception as e:
-                print(f"\nAnother error occurred when accessing the json-loaded quest structure:\n{e}\n")
+                self.__coco.coco_debug(f"Another error occurred when accessing the json-loaded quest structure:\n{e}\n")
                 return False
             else:
                 break
@@ -374,27 +552,26 @@ WHERE {
         validation_msgs = self.__messages.copy()
 
         message = f'''Now only validate if the generated quest, as it is described in the generated structure, is 
-        consistent with the narrative and the queried graph node triplets. Also make sure that it is logical and 
-        playable. Here is the generated quest again:\n{generated_quest_structure}
+        consistent with the narrative and the queried graph node triplets. If some knowledge is provided only by the 
+        graph node triplets, assume it was just not mentioned in the narrative, and that it's therefore still valid. 
+        Also make sure that it is logical and playable. Here is the generated quest again:\n{generated_quest_structure}
         And here are the queried graph node triplets again:\n{self.__last_queried_triplets}'''
 
         validation_msgs.append(Message(message, self.SYSTEM_ROLE))
-        response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check")
+        response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check", 0.25)
 
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
         valid = response_arguments.get("is_quest_valid")
         explanation = response_arguments.get("validity_explanation")
-        print(f"\nQuest Validation:\n{valid}\n{explanation}")
+        self.__coco.coco_debug(f"Quest Validation:\n{valid}\n{explanation}")
 
         return valid
 
     def clear_triplets(self):
         self.__last_queried_triplets.clear()
 
-    def convert_quest(self, quest_structure: str):
-        # something's not correct yet...
-        json_quest = json.loads(f'{quest_structure}')
-        # print(f"Debug JSON quest:\n{json_quest}")
+    def convert_quest(self, generated_structure: str):
+        json_quest = json.loads(f'{generated_structure}')
         q_name = json_quest["Name"]
         q_description = json_quest["Detailed_Description"]
         q_s_description = json_quest["Short_Description"]
@@ -424,9 +601,7 @@ WHERE {
             }''')
         predicates = reorder_query_triplets(predicates)
 
-        #last_consequences = []
         for cons in consequences:
-            #last_consequences.append(cons)
             message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
             "{node_triplets}".\n
             In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
@@ -436,10 +611,13 @@ WHERE {
             , focusing on removing and changing only specific attributes when necessary. Note that the query is solely 
             intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
             Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
-            ones. Below is a comprehensive list of the available predicates:\n{predicates}
+            ones. Take a step back and think about every predicates true meaning, so you can apply them truthfully and 
+             don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
+             {predicates}
             Here is the task consequence:
             "{cons}".\n
-            When generating the query, please use the following pattern for the query:
+            When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
+            and please use the following pattern for the query:
             "{sparql_pattern}".\n
             You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
             first time the triple is set.
@@ -452,13 +630,17 @@ WHERE {
 
             update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
             response = self.__gpt_facade.get_response(update_graph_msgs)
-            update_queries.append(response["choices"][0]["message"]["content"])
+            update_queries.append(correct_query(response["choices"][0]["message"]["content"]))
             usage = response["usage"]
-            print(f"\nToken Info: \n{usage}")
+            self.__coco.coco_debug(f"Token Info: \n{usage}")
 
-        # instead actually update the graph...
-        print(f"\nUpdate Queries:")
+        self.__coco.coco_debug(f"Update Queries:")
         i: int = 1
         for upt_query in update_queries:
-            print(f"U.Q. {i}:\n{upt_query}")
+            self.__coco.coco_debug(f"U.Q. {i}:\n{upt_query}")
+            try:
+                self.__bg.update(upt_query)
+            except sparql.SPARQLQueryException:
+                upt_query = correct_query(upt_query)
+                self.__bg.update(upt_query)
             i += 1
