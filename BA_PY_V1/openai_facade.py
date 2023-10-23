@@ -1,5 +1,6 @@
 import openai
 import time
+import color_console
 
 
 class OpenAIFacade:
@@ -9,6 +10,7 @@ class OpenAIFacade:
         self.__max_tries = max_request_tries
         self.__waiting_time = waiting_time
         self.__messages = []
+        self.__coco = color_console.ColorConsole()
 
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
@@ -25,8 +27,10 @@ class OpenAIFacade:
                     temperature=temperature
                 )
             except openai.error.RateLimitError:
-                print(f"\nWaiting for {self.__waiting_time} seconds...\n")
+                self.__coco.coco_print(f"\nWaiting for {self.__waiting_time} seconds...\n")
                 time.sleep(self.__waiting_time)
+            except Exception as e:
+                self.__coco.coco_error(f"an unknown Error occured: {e}")
             else:
                 messages.append(response["choices"][0]["message"])
                 break
@@ -45,7 +49,7 @@ class OpenAIFacade:
                 )
             except openai.error.RateLimitError:
                 waiting_time = 10
-                print(f"\nWaiting for {waiting_time} seconds...\n")
+                self.__coco.coco_print(f"\nWaiting for {waiting_time} seconds...\n")
                 time.sleep(waiting_time)
             else:
                 break
