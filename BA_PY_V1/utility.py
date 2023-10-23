@@ -2,12 +2,7 @@ def create_message(content: str, role: str):
     return {"role": role, "content": content}
 
 
-def print_response(response):
-    print(response["choices"][0]["message"]["content"])
-
-
 def trim_quest_structure(quest_output: str):
-    print(quest_output)
     start_index = quest_output.find("{")
 
     end_index = quest_output.rfind("}")
@@ -54,13 +49,13 @@ def reorder_query_triplets(query_result):
 
     # basically recombining the triplets
     triplets = []
-    print("\nTriplets:")
+    #print("\nTriplets:")
     for i in range(val_count):
         triplet = ""
         for j in range(var_count):
             triplet = f"{triplet}{values[i + j * val_count]} "
         triplets.append(triplet)
-        print(triplet)
+        #print(triplet)
     return triplets
 
 
