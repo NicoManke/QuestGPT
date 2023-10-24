@@ -53,7 +53,7 @@ class Game:
         while True:
             user_answer = self.__coco.coco_input("What do you want to do? Explore, request a quest, go on a quest or do you want to quit?")
             chosen_path = self.choose_path(user_answer)
-            self.__coco.coco_debug(f"Chosen Path: {chosen_path}")
+            self.__coco.coco_debug(f"Chosen Path - {chosen_path}")
 
             if chosen_path == "explore":
                 self.handle_exploration()
@@ -110,9 +110,8 @@ class Game:
     def handle_quest_request(self):
         while True:
             user_request = self.__coco.coco_input("Please tell us what quest you want to play.")
-
+            self.__coco.coco_print("Starting quest generation...")
             extracted_nodes = self.get_graph_knowledge(user_request)
-
             gen_quest = self.generate_quest(user_request, extracted_nodes)
 
             if not self.was_quest_generated(gen_quest):
@@ -121,26 +120,26 @@ class Game:
             gen_quest = self.correct_structure(gen_quest)
 
             if self.is_quest_valid(gen_quest):
-                # quest_answer = self.__coco.coco_input("Do you want to accept the quest?")
-                # if accept_quest(quest_answer):
-                # ...
-                gen = self.convert_quest(gen_quest)
-                self.__quests.append(gen)
-                consequences = []
-                for st in gen.sub_tasks:
-                    for cons in st["Task_Consequences"]:
-                        consequences.append(cons["Description"])
-                self.update_graph_based_on_consequences(consequences, extracted_nodes)
+                quest_answer = self.__coco.coco_input("Do you want to accept the quest?")
+                if self.is_accepting_quest(quest_answer):
+                    self.__coco.coco_print("The quest suggestion was accepted. Completing generation...")
+                    gen = self.convert_quest(gen_quest)
+                    self.__quests.append(gen)
+                    consequences = []
+                    for st in gen.sub_tasks:
+                        for cons in st["Task_Consequences"]:
+                            consequences.append(cons["Description"])
+                    self.update_graph_based_on_consequences(consequences, extracted_nodes)
 
-                self.__coco.coco_game(f"Here is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
-                self.clear_triplets()
-                break
-                # else:
-                #     remain_answer = self.__coco.coco_input("Do you still want to request a quest?")
-                #         if keep_requesting(remain_answer):
-                #             continue
-                #         else:
-                #             break
+                    self.__coco.coco_game(f"Here is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
+                    self.clear_triplets()
+                    break
+                else:
+                    remain_answer = self.__coco.coco_input("Do you want to request another quest?")
+                    if self.continue_requesting(remain_answer):
+                        continue
+                    else:
+                        break
             else:
                 self.__coco.coco_print("Generated quest was not valid!")
                 self.clear_triplets()
@@ -294,6 +293,35 @@ class Game:
         keep_exploring = response_arguments.get("continue_exploring")
 
         return keep_exploring
+
+    def continue_requesting(self, answer: str):
+        decision_msgs = []
+        dummy_functions = [{
+            "name": "continue_requesting_check",
+            "description": "Decides based on the provided player answer, if he wants to request another quest, or if he wants to do something else.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "continue_requesting": {
+                        "type": "boolean",
+                        "description": "True if the player wants to request another quest, false if he does not.",
+                    }
+                }, "required": ["continue_exploring"],
+            }
+        }]
+
+        message = f'''The player was asked if he wants to continue requesting quests, this was his answer: "{answer}". 
+                Now decide based on his answer if the player wants to continue requesting, or if he wants to stop.
+                You can generally check if the player explicitly wants to continue requesting, perhaps with a simple 
+                'yes,' or if they express a different desire than requesting a quest.'''
+
+        decision_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(decision_msgs, dummy_functions, "continue_requesting_check", 0.1)
+
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        keep_requesting = response_arguments.get("continue_requesting")
+
+        return keep_requesting
 
     def reset_graph(self):
         self.__bg.clear_graph()
@@ -630,6 +658,36 @@ WHERE {
 
         return valid
 
+    def is_accepting_quest(self, answer: str):
+        decision_msgs = []
+        dummy_functions = [{
+            "name": "accept_quest_check",
+            "description": "Decides based on the provided player answer, if he wants to accept the provided quest or if he wants to stop deny it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accept_quest": {
+                        "type": "boolean",
+                        "description": "True if the wants to accept the quest, false if he denies it or if he expresses dislikes.",
+                    }
+                }, "required": ["continue_exploring"],
+            }
+        }]
+
+        message = f'''The player was asked if he wants to accept the suggested quest, this was his answer: "{answer}". 
+                Now decide based on his answer if the player wants to accept the quest, or if he wants to deny it, 
+                resulting in a new iteration of request and generation. 
+                Generally, you can check if the player explicitly wants to accept it, maybe with a simple yes, or if he 
+                expresses some type of dislikes, like a simple no or by talking bad about the suggested quest.'''
+
+        decision_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(decision_msgs, dummy_functions, "accept_quest_check", 0.1)
+
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        accept_quest = response_arguments.get("accept_quest")
+
+        return accept_quest
+
     def clear_triplets(self):
         self.__last_queried_triplets.clear()
 
@@ -749,8 +807,9 @@ WHERE {
         and please use the following pattern for the query:
         "{sparql_pattern}".
         Use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the first time 
-        the triple is set. And if there is nothing to update, please return an query with empty brackets, following the 
-        provided pattern. Also, when generating the query, always use this prefixes:
+        the triple is set. Always write out triplets completely, even if they share the same subject, and remember to 
+        place the finishing '.' at the end of each triplet. And if there is nothing to update, please return an query 
+        with empty brackets, following the provided pattern. Also, when generating the query, always use this prefixes:
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
