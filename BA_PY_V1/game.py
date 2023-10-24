@@ -212,7 +212,7 @@ class Game:
                 "properties": {
                     "is_request_valid": {
                         "type": "boolean",
-                        "description": "True if the action contained by the exploration request can be done by the player, both in terms of its capabilities and in terms of what the game world, the narrative, and general logic allow.",
+                        "description": "True if the action contained by the exploration request can be done by the player, both in terms of its capabilities and in terms of what the game world, the narrative, and general logic allow and has to offer.",
                     },
                     "action_reaction": {
                         "type": "string",
@@ -230,9 +230,9 @@ class Game:
 
         message = f'''Now only validate if the user's request for performing an arbitrary action can be performed by the 
         player, both in terms of its capabilities and in terms of what the game world, the narrative, and general 
-        logic allow. Furthermore, small actions that don't change the state of the world, like cutting a single tree, 
-        going on a walk, picking some flowers, or building a snow man in a snowy region, can normally performed without 
-        any issues.
+        logic allow and have to offer. Furthermore, small actions that don't change the state of the world, like cutting 
+        a single tree, going on a walk, picking some flowers, or building a snow man in a snowy region, can normally be 
+        performed without any issues.
         Here is the user's exploration request: "{exploration_request}".
         Here is the narrative used as a base for the game world: "{narrative.get_narrative()}"
         Here are some graph node triplets that were queried based on the request: "{extracted_nodes}"'''
@@ -724,19 +724,22 @@ WHERE {
 
         message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
         "{node_triplets}".\n
-        In our medieval RPG game, the player can explore the game world outside of clearly structured quests. During 
-        this explorations he can perform actions that could change the state of the game world and its underlying 
-        knowledge graph. Your task is to craft only one single SparQL query, based on the given triplets, that logically 
-        updates the relevant triplets influenced by the performed action. Differentiate between changes that are 
-        essential for the graph and those that are to small and irrelevant. If the player creates something new, like 
-        for example a cabin, then you may add a new node to the graph, including all necessary attributes. Ensure that 
-        node deletion is minimal, focusing on removing and changing only specific attributes when necessary. Note that 
-        the query is solely intended for graph updates and does not require condition checking. Refrain from deleting 
-        entire nodes. Emphasize the importance of respecting and opting for pre-existing predicates instead of 
-        introducing new ones. Take a step back and think about every predicates true meaning, so you can apply them 
-        truthfully and don't accidentally create a redundant predicate. Below is a comprehensive list of the available 
-        predicates:
+        In our medieval RPG game, players can freely explore the game world beyond structured quests. During these 
+        explorations, they can take actions that potentially alter the state of the game world and its underlying 
+        knowledge graph. Your challenge is to craft a single SparQL query, using the provided triplets, to logically 
+        update relevant triplets impacted by the player's actions. Distinguish between changes essential to the graph 
+        and those that are minor or inconsequential. When a player creates something new, like a cabin, or when an 
+        object or resource, which should naturally exist in the game world based on the setting, is mentioned, you may 
+        add a new node to the graph, including all necessary attributes.
+        Emphasize minimal node deletion, with a focus on altering or removing specific attributes when necessary. This 
+        query is exclusively for graph updates and does not involve condition checking or complete node deletions. 
+        Prioritize the use of existing predicates over introducing new ones. Ensure a thoughtful approach to the meaning 
+        of each predicate and type, applying them accurately to avoid redundancy or the creation of unnecessary 
+        predicates or types. Use types exclusively for assigning identical types to nodes, without combining those types 
+        with other predicates. Below is a comprehensive list of the available predicates:
         {predicates}
+        And here is a comprehensive list of the available types that new nodes can have: 
+        "{self.__node_types}".
         Here is the user's action request:
         "{action_request}".
         Here is the game's description of and reaction to the player's action: 
@@ -744,17 +747,17 @@ WHERE {
         This description may help defining what actually happens in the world, not only what the player requested to do.
         When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
         and please use the following pattern for the query:
-        "{sparql_pattern}".\n
-        You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
-        first time the triple is set.
-        Also, when generating the query, please use this prefixes:
+        "{sparql_pattern}".
+        Use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the first time 
+        the triple is set. And if there is nothing to update, please return an query with empty brackets, following the 
+        provided pattern. Also, when generating the query, always use this prefixes:
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         PREFIX ex: <http://example.org/>
         '''
         update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
-        response = self.__gpt_facade.get_response(update_graph_msgs)
+        response = self.__gpt_facade.get_response(update_graph_msgs, 0.2)
         update_query = correct_query(response["choices"][0]["message"]["content"])
 
         self.__coco.coco_debug(f"Update Query:\n{update_query}")
