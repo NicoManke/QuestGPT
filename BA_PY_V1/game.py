@@ -115,26 +115,36 @@ class Game:
 
             gen_quest = self.generate_quest(user_request, extracted_nodes)
 
+            if not self.was_quest_generated(gen_quest):
+                continue
+
             gen_quest = self.correct_structure(gen_quest)
 
             if self.is_quest_valid(gen_quest):
+                # quest_answer = self.__coco.coco_input("Do you want to accept the quest?")
+                # if accept_quest(quest_answer):
+                # ...
                 gen = self.convert_quest(gen_quest)
                 self.__quests.append(gen)
                 consequences = []
                 for st in gen.sub_tasks:
                     for cons in st["Task_Consequences"]:
                         consequences.append(cons["Description"])
-                self.update_graph(consequences, extracted_nodes)
+                self.update_graph_based_on_consequences(consequences, extracted_nodes)
 
                 self.__coco.coco_game(f"Here is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
                 self.clear_triplets()
                 break
+                # else:
+                #     remain_answer = self.__coco.coco_input("Do you still want to request a quest?")
+                #         if keep_requesting(remain_answer):
+                #             continue
+                #         else:
+                #             break
             else:
                 self.__coco.coco_print("Generated quest was not valid!")
                 self.clear_triplets()
                 continue
-
-
 
     def handle_quest_progression(self):
         if len(self.__quests) == 0:
@@ -169,25 +179,70 @@ class Game:
                 break
 
     def handle_exploration(self):
+        self.__coco.coco_game("You start exploring...")
         while True:
             next_action = self.__coco.coco_input("What do you want to do next?")
-            # verarbeitung next action -> possible or not-possible?
             if self.continue_exploring(next_action):
-                self.__coco.coco_game("\"Feedback to your actions...\"")
-                # function call that returns a bool and a Description...
-                # valid = ...
-                # desc = ...
-                # if valid:
-                #    print()
-                #    optional graph update
-                #    updating generated quests ? How ?!
-                # else:
-                #    say that the action can't be performed
-                # repeat until player wants to do or request a quest
+                validation_output = self.validate_exploration(next_action)
+                valid = validation_output.get("is_request_valid")
+                reaction = validation_output.get("action_reaction")
+                explanation = validation_output.get("validity_explanation")
+                if valid:
+                    self.update_graph_based_on_explor_actions(next_action, reaction, self.__last_queried_triplets)
+                    self.clear_triplets()
+                    self.__coco.coco_game(reaction)
+                    # updating generated quests ? How ?!
+                else:
+                    self.__coco.coco_print(f"Your requested action can't be performed, see: {explanation}")
+                    self.__coco.coco_game(reaction)
                 continue
             else:
                 self.__coco.coco_game("Finish exploring...")
                 break
+
+    def validate_exploration(self, exploration_request: str):
+        extracted_nodes = self.get_graph_knowledge(exploration_request)
+        self.__last_queried_triplets = extracted_nodes.copy()
+
+        validity_function = [{
+            "name": "validity_check",
+            "description": "Decides based on the given user request, the narrative and queried graph node triplets if the request is possible and therefore valid.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "is_request_valid": {
+                        "type": "boolean",
+                        "description": "True if the action contained by the exploration request can be done by the player, both in terms of its capabilities and in terms of what the game world, the narrative, and general logic allow and has to offer.",
+                    },
+                    "action_reaction": {
+                        "type": "string",
+                        "description": "The game's reaction on the user's action. This should be a sentence describing the user's action, if valid, or that should be stating that the action can not be performed due to some reasons, if not valid.",
+                    },
+                    "validity_explanation": {
+                        "type": "string",
+                        "description": "The explanation and description of why the action request is valid or invalid.",
+                    }
+                }, "required": ["is_quest_valid", "action_reaction", "validity_explanation"],
+            }
+        }]
+
+        validation_msgs = []
+
+        message = f'''Now only validate if the user's request for performing an arbitrary action can be performed by the 
+        player, both in terms of its capabilities and in terms of what the game world, the narrative, and general 
+        logic allow and have to offer. Furthermore, small actions that don't change the state of the world, like cutting 
+        a single tree, going on a walk, picking some flowers, or building a snow man in a snowy region, can normally be 
+        performed without any issues.
+        Here is the user's exploration request: "{exploration_request}".
+        Here is the narrative used as a base for the game world: "{narrative.get_narrative()}"
+        Here are some graph node triplets that were queried based on the request: "{extracted_nodes}"'''
+
+        validation_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check", 0.25)
+
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+
+        return response_arguments
 
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
@@ -267,7 +322,7 @@ class Game:
             f"Here is a list of all node types contained in our knowledge graph: {self.__node_types}",
             self.SYSTEM_ROLE))
         msgs.append(Message(
-            f"Decide which of the given node types need to be queried based of the following user quest request: {request}",
+            f"Decide which of the given node types need to be queried based of the following user request: {request}",
             self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(msgs, query_nodes_function, "query_nodes")
 
@@ -403,7 +458,11 @@ VALUES (?node) {(ex:Stranger)}
         function_args = json.loads(response_message["function_call"]["arguments"])
         self.__coco.coco_debug(f"Args (deeper nodes): {function_args}")
 
-        required_nodes_list = function_args.get("required_nodes").split(', ')
+        try:
+            required_nodes_list = function_args.get("required_nodes").split(', ')
+        except AttributeError as ae:
+            self.__coco.coco_debug(f"List error at \"required_nodes\": {ae}")
+            required_nodes_list = function_args.get("required_nodes")
         queries = []
         for node in required_nodes_list:
             query = '''PREFIX ex: <http://example.org/>
@@ -495,12 +554,16 @@ WHERE {
 
         return generated_quest_structure
 
+    def was_quest_generated(self, generated_quest_structure: str):
+        if generated_quest_structure.find("{") == -1 or generated_quest_structure.find("}") == -1:
+            self.__coco.coco_print(f"Quest wasn't generated:\n{generated_quest_structure}")
+            return False
+        else:
+            return True
+
     def is_quest_valid(self, generated_quest_structure: str):
         # checking if there is any structure
-        if generated_quest_structure.find("{") == -1 or generated_quest_structure.find("}") == -1:
-            self.__coco.coco_debug(f"Quest wasn't generated:\n{generated_quest_structure}")
-            # there is probably a new recommendation in the given answer, so it may be a good idea to re-feed the answer
-            # back into the quest-generation for a 2nd round
+        if not self.was_quest_generated(generated_quest_structure):
             return False
 
         while True:
@@ -586,7 +649,7 @@ WHERE {
         self.__consequences.append(new_cons)
         return new_cons
 
-    def update_graph(self, consequences, node_triplets):
+    def update_graph_based_on_consequences(self, consequences, node_triplets):
         update_graph_msgs = self.__messages.copy()
         update_queries = []
         sparql_pattern = "DELETE {} INSERT {} WHERE {}"
@@ -612,8 +675,8 @@ WHERE {
             intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
             Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
             ones. Take a step back and think about every predicates true meaning, so you can apply them truthfully and 
-             don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
-             {predicates}
+            don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
+            {predicates}
             Here is the task consequence:
             "{cons}".\n
             When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
@@ -644,3 +707,62 @@ WHERE {
                 upt_query = correct_query(upt_query)
                 self.__bg.update(upt_query)
             i += 1
+
+    def update_graph_based_on_explor_actions(self, action_request, system_reaction, node_triplets):
+        update_graph_msgs = self.__messages.copy()
+        sparql_pattern = "DELETE {} INSERT {} WHERE {}"
+        optional_block = "OPTIONAL {}"
+
+        predicates = self.__bg.query('''
+            PREFIX ex: <http://example.org/>
+
+            SELECT DISTINCT ?predicate
+            WHERE {
+                ?subject ?predicate ?object
+            }''')
+        predicates = reorder_query_triplets(predicates)
+
+        message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
+        "{node_triplets}".\n
+        In our medieval RPG game, players can freely explore the game world beyond structured quests. During these 
+        explorations, they can take actions that potentially alter the state of the game world and its underlying 
+        knowledge graph. Your challenge is to craft a single SparQL query, using the provided triplets, to logically 
+        update relevant triplets impacted by the player's actions. Distinguish between changes essential to the graph 
+        and those that are minor or inconsequential. When a player creates something new, like a cabin, or when an 
+        object or resource, which should naturally exist in the game world based on the setting, is mentioned, you may 
+        add a new node to the graph, including all necessary attributes.
+        Emphasize minimal node deletion, with a focus on altering or removing specific attributes when necessary. This 
+        query is exclusively for graph updates and does not involve condition checking or complete node deletions. 
+        Prioritize the use of existing predicates over introducing new ones. Ensure a thoughtful approach to the meaning 
+        of each predicate and type, applying them accurately to avoid redundancy or the creation of unnecessary 
+        predicates or types. Use types exclusively for assigning identical types to nodes, without combining those types 
+        with other predicates. Below is a comprehensive list of the available predicates:
+        {predicates}
+        And here is a comprehensive list of the available types that new nodes can have: 
+        "{self.__node_types}".
+        Here is the user's action request:
+        "{action_request}".
+        Here is the game's description of and reaction to the player's action: 
+        "{system_reaction}".
+        This description may help defining what actually happens in the world, not only what the player requested to do.
+        When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
+        and please use the following pattern for the query:
+        "{sparql_pattern}".
+        Use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the first time 
+        the triple is set. And if there is nothing to update, please return an query with empty brackets, following the 
+        provided pattern. Also, when generating the query, always use this prefixes:
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX ex: <http://example.org/>
+        '''
+        update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.get_response(update_graph_msgs, 0.2)
+        update_query = correct_query(response["choices"][0]["message"]["content"])
+
+        self.__coco.coco_debug(f"Update Query:\n{update_query}")
+        try:
+            self.__bg.update(update_query)
+        except sparql.SPARQLQueryException:
+            upt_query = correct_query(update_query)
+            self.__bg.update(upt_query)
