@@ -121,6 +121,9 @@ class Game:
             gen_quest = self.correct_structure(gen_quest)
 
             if self.is_quest_valid(gen_quest):
+                # quest_answer = self.__coco.coco_input("Do you want to accept the quest?")
+                # if accept_quest(quest_answer):
+                # ...
                 gen = self.convert_quest(gen_quest)
                 self.__quests.append(gen)
                 consequences = []
@@ -132,6 +135,12 @@ class Game:
                 self.__coco.coco_game(f"Here is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
                 self.clear_triplets()
                 break
+                # else:
+                #     remain_answer = self.__coco.coco_input("Do you still want to request a quest?")
+                #         if keep_requesting(remain_answer):
+                #             continue
+                #         else:
+                #             break
             else:
                 self.__coco.coco_print("Generated quest was not valid!")
                 self.clear_triplets()
@@ -182,7 +191,7 @@ class Game:
                     self.update_graph_based_on_explor_actions(next_action, reaction, self.__last_queried_triplets)
                     self.clear_triplets()
                     self.__coco.coco_game(reaction)
-                    #    updating generated quests ? How ?!
+                    # updating generated quests ? How ?!
                 else:
                     self.__coco.coco_print(f"Your requested action can't be performed, see: {explanation}")
                     self.__coco.coco_game(reaction)
@@ -192,8 +201,6 @@ class Game:
                 break
 
     def validate_exploration(self, exploration_request: str):
-
-        # graph node query
         extracted_nodes = self.get_graph_knowledge(exploration_request)
         self.__last_queried_triplets = extracted_nodes.copy()
 
@@ -234,9 +241,6 @@ class Game:
         response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check", 0.25)
 
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
-        # valid = response_arguments.get("is_request_valid")
-        # explanation = response_arguments.get("validity_explanation")
-        # self.__coco.coco_debug(f"Exploration Request Validation:\n{valid}\n{explanation}")
 
         return response_arguments
 
@@ -671,8 +675,8 @@ WHERE {
             intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
             Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
             ones. Take a step back and think about every predicates true meaning, so you can apply them truthfully and 
-             don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
-             {predicates}
+            don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
+            {predicates}
             Here is the task consequence:
             "{cons}".\n
             When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
