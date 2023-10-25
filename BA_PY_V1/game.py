@@ -2,7 +2,8 @@ import json
 
 import openai_facade
 import quest
-import consequence
+import sub_task
+# import consequence
 import blazegraph
 import color_console
 from pymantic import sparql
@@ -22,16 +23,18 @@ class Game:
         self.__node_messages = []
         self.__messages = []
         self.__quests = []
+        self.__completed_quests = []
         self.__consequences = []
         self.__last_queried_triplets = []
         self.SYSTEM_ROLE = "system"
         self.USER_ROLE = "user"
 
+        self.__coco = color_console.ColorConsole()
+
         self.__gpt_facade = openai_facade.OpenAIFacade(api_key, api_model, max_request_tries, waiting_time=waiting_time)
 
         self.__server_address = server_address
         self.__bg = blazegraph.BlazeGraph(self.__server_address)
-        self.__coco = color_console.ColorConsole()
 
         # node graph node types here; currently just selected examples
         self.__node_types = '''
@@ -127,8 +130,8 @@ class Game:
                     self.__quests.append(gen)
                     consequences = []
                     for st in gen.sub_tasks:
-                        for cons in st["Task_Consequences"]:
-                            consequences.append(cons["Description"])
+                        for cons in st.consequences:
+                            consequences.append(cons.description)
                     self.update_graph_based_on_consequences(consequences, extracted_nodes)
 
                     self.__coco.coco_game(f"Here is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
@@ -147,35 +150,59 @@ class Game:
 
     def handle_quest_progression(self):
         if len(self.__quests) == 0:
-            alternative_selection = self.__coco.coco_input("Sorry, there are currently no quests available. Do you want to request a quest or to explore the world?")
-
-            # change state based on alt selection or return to loop beginning
+            self.__coco.coco_game("Sorry, there are currently no quests available. Maybe try generating one first.")
         else:
-            quest_selection = "What quest do you want to play? Here are your options:"
+            quest_selection = "Which quest do you want to play? Here are your options:"
             quest_number = 1
+            quest_enumeration = []
             for quest_option in self.__quests:
-                quest_selection = f"{quest_selection}\n{quest_number}. Name: {quest_option.name}.\n Desc: {quest_option.description}."
+                quest_enum = f"{quest_number}. Name: {quest_option.name}.\n Desc: {quest_option.description}"
+                quest_enumeration.append(quest_enum)
+                quest_selection = f"{quest_selection}\n{quest_enum}"
                 quest_number += 1
+
             selected_quest = self.__coco.coco_input(quest_selection)
+            selected_index = self.select_quest(selected_quest, quest_enumeration)
+            self.__coco.coco_debug(f"Quest with index '{selected_index}' was chosen.")
+            index = selected_index - 1
+            current_quest: quest.Quest = self.__quests.__getitem__(index)
+            self.__coco.coco_game(f"The Quest '{current_quest.name}' was chosen.\n")
 
-            # select and start quest
-            current_quest = self.__quests.__getitem__(0)
-
-            current_task_index = 0
-            while True:
-                # start task 1
-                current_task = current_quest.sub_tasks.__getitem__(current_task_index)
-
+            if current_quest.chrono or True:
+                current_task_index = 0
                 while True:
+                    current_task = current_quest.sub_tasks[current_task_index]
 
-                    # if done...
-                    break
+                    self.__coco.coco_game(f'''You approach the task '{current_task.name}', which is described as '{current_task.description}'.''')
 
-                # progress... loop...
-                current_task_index += 1
+                    # do descriptive output of what is going to happen -> GPT
+                    self.__coco.coco_game("Some description to what will happen in the task...")
 
-                # finish
-                break
+                    if len(current_task.dialogue_opts) > 0:
+                        for task_opt_dict in current_task.dialogue_opts:
+                            npc = task_opt_dict["NPC"]
+                            dialogue = task_opt_dict["Text"]
+                            self.__coco.coco_dialogue(npc, dialogue)
+                    else:
+                        self.__coco.coco_debug("There was no dialogue...")
+
+                    # do descriptive output of what happened (desc + cons), and that the task is now finished -> GPT
+                    self.__coco.coco_game("Some description to what happened in the task...")
+
+                    current_task.complete_task()  # should include update query performing
+
+                    current_task_index += 1
+                    if current_task_index >= len(current_quest.sub_tasks):
+                        self.__coco.coco_game(f"You finished the last task and therefore completed the quest '{current_quest.name}'!\n")
+                        self.__completed_quests.append(self.__quests.pop(index))
+                        break
+                    else:
+                        self.__coco.coco_game("You finished the task, now let's move on to the next task.\n")
+                        continue
+            else:  # I don't know, add some type of random order (for this approach) or so I guess
+                self.__coco.coco_game("Quest is not chronological.")
+
+
 
     def handle_exploration(self):
         self.__coco.coco_game("You start exploring...")
@@ -242,6 +269,37 @@ class Game:
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
 
         return response_arguments
+
+    def select_quest(self, quest_selection: str, quest_enumeration: []):
+        select_function = [{
+            "name": "select_quest",
+            "description": "Decides based on the given user answer which index should be used to access a specific quest from the quest list..",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "index": {
+                        "type": "number",
+                        "description": "The index of the quest that should be accessed in a list. Based on the user's answer and the provided enumeration connecting a quests name, description and a number.",
+                    },
+                }, "required": ["index"],
+            }
+        }]
+
+        select_msgs = []
+        message = f'''Now select based on the given user answer which index should be chosen, here the answer: 
+        "{quest_selection}."
+        Before answering the user was provided with a list of strings, listing every available quest's name, description 
+        and an arbitrary number based on its position in the list. So the user's answer may include a reference to this 
+        number, the quest's name or the quest's description. Based on this included references select the associated 
+        number from the list and return it. The listing starts counting at 1, please keep this. Here is now the list 
+        with strings listing the quests: 
+        "{quest_enumeration}"'''
+
+        select_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(select_msgs, select_function, "select_quest", 0.1)
+        response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
+        index = response_arguments.get("index")
+        return index
 
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
@@ -698,12 +756,29 @@ WHERE {
         q_s_description = json_quest["Short_Description"]
         q_source = json_quest["Source"]
         q_chrono = json_quest["Chronological"]
+        # sub_task creation
         q_sub_tasks = json_quest["SubTasks"]
-        new_quest = quest.Quest(q_name, q_description, q_s_description, q_source, q_chrono, q_sub_tasks)
+        sub_tasks = []
+        for task_dict in q_sub_tasks:
+            consequences = []
+            for cons_dict in task_dict["Task_Consequences"]:
+                consequences.append(sub_task.Consequence(cons_dict["Description"]))
+            new_sub_task = sub_task.SubTask(
+                name=task_dict["Name"],
+                description=task_dict["Description"],
+                type=task_dict["Type"],
+                npc=task_dict["NPC"],
+                location=task_dict["Location"],
+                dialogue_options=task_dict["DialogueOptions"],
+                consequences=consequences
+            )
+            sub_tasks.append(new_sub_task)
+
+        new_quest = quest.Quest(q_name, q_description, q_s_description, q_source, q_chrono, sub_tasks)
         return new_quest
 
     def create_consequence(self, description: str):
-        new_cons = consequence.Consequence(description)
+        new_cons = sub_task.Consequence(description)
         self.__consequences.append(new_cons)
         return new_cons
 
