@@ -17,14 +17,16 @@ class ColorConsole:
     BRIGHT_CYAN = "\033[96m"
     BRIGHT_WHITE = "\033[97m"
 
-    def __init__(self, game_name: str = "Game"):
+    def __init__(self, game_name: str = "Game", do_debug: bool = True):
         self.__game_name = game_name
+        self.__do_debug = do_debug
 
     def coco_error(self, text: str):
         print(f"{self.RED}ERROR:{self.RESET} {text}")
 
     def coco_debug(self, text: str):
-        print(f"{self.BRIGHT_GREEN}Debug:{self.RESET}{self.BRIGHT_BLACK} {text}{self.RESET}")
+        if self.__do_debug:
+            print(f"{self.BRIGHT_GREEN}Debug:{self.RESET}{self.BRIGHT_BLACK} {text}{self.RESET}")
 
     def coco_print(self, text: str):
         print(f"{self.YELLOW}System:{self.RESET} {text}")
@@ -34,5 +36,8 @@ class ColorConsole:
 
     def coco_input(self, text: str):
         return input(f"{self.MAGENTA}{self.__game_name}:{self.RESET} {text}\n{self.CYAN}Input:{self.RESET} ")
+
+    def coco_dialogue(self, npc: str, dialogue: str):
+        print(f"{self.BLUE}{npc}:{self.RESET} {dialogue}")
 
 
