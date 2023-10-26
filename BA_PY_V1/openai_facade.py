@@ -35,6 +35,10 @@ class OpenAIFacade:
                 messages.append(response["choices"][0]["message"])
                 break
 
+        prompt_tokens = response["usage"]["prompt_tokens"]
+        completion_tokens = response["usage"]["completion_tokens"]
+        self.__coco.coco_debug(f"prompt tokens: {prompt_tokens}, completion tokens: {completion_tokens}.")
+
         return response
 
     def make_function_call(self, messages: [], functions: [], function_call: str = "auto", temperature=0.0):
@@ -53,6 +57,10 @@ class OpenAIFacade:
                 time.sleep(waiting_time)
             else:
                 break
+
+        prompt_tokens = response["usage"]["prompt_tokens"]
+        completion_tokens = response["usage"]["completion_tokens"]
+        self.__coco.coco_debug(f"prompt tokens: {prompt_tokens}, completion tokens: {completion_tokens}.")
 
         return response
 
