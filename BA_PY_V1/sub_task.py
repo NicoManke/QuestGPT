@@ -12,7 +12,7 @@ class SubTask:
 
     def complete_task(self):
         self.complete = True
-        self.resolve_consequences()
+        #self.resolve_consequences()
 
     def resolve_consequences(self):
         for cons in self.consequences:
@@ -21,9 +21,25 @@ class SubTask:
 
 
 class Consequence:
-    def __init__(self, description: str):
+    def __init__(self, description: str, update_query: str = ""):
         self.description = description
+        self.__update_query = update_query
+
+    def set_update_query(self, update_query: str):
+        self.__update_query = update_query
+
+    def get_update_query(self):
+        return self.__update_query
 
     def resolve(self):
         # here should happen way more complex stuff
         print(self.description)
+        print(self.__update_query)
+
+
+class DialogueOptions:
+    def __init__(self, id, previous_id, npc, dialogue):
+        self.id = id
+        self.prev_id = previous_id
+        self.npc = npc
+        self.dialogue = dialogue

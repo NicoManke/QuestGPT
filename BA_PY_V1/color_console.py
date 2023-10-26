@@ -37,4 +37,7 @@ class ColorConsole:
     def coco_input(self, text: str):
         return input(f"{self.MAGENTA}{self.__game_name}:{self.RESET} {text}\n{self.CYAN}Input:{self.RESET} ")
 
+    def coco_dialogue(self, npc: str, dialogue: str):
+        print(f"{self.BLUE}{npc}:{self.RESET} {dialogue}")
+
 
