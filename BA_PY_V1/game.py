@@ -98,9 +98,14 @@ class Game:
             }
         }]
 
-        message = f'''The player was asked what he wants to do and this was his answer: "{user_request}". 
-                Now decide based on his answer if the player wants to continue exploring, if he requests a new quest, if 
-                he wants to play an already generated quest, or if he wants to quit the game completely.'''
+        message = f'''The player has expressed their intent with the following request: '{user_request}'. Now, based on 
+        this request, determine whether the player wishes to continue exploring, create a new quest, engage in an 
+        existing quest, quit the game, or if the request is undefined. Please make a clear distinction between a request 
+        for quest generation and a request to play an already generated quest. Typically, a request for quest generation 
+        is indicated either by a direct mention, by a request for a substantial task that logically belongs in a quest 
+        or by simply asking for a new quest. The desire to play an existing quest is often expressed through phrases 
+        like 'I want to go on a quest', 'I want to embark on a quest', 'I'd like to play a quest', 'I'm ready to 
+        complete a quest', or 'I want to participate in a quest.'''
 
         decision_msgs.append(Message(message, self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(decision_msgs, dummy_functions, "path_selection", 0.1)
@@ -128,11 +133,12 @@ class Game:
                     self.__coco.coco_print("The quest suggestion was accepted. Completing generation...")
                     gen = self.convert_quest(gen_quest)
                     self.__quests.append(gen)
-                    consequences = []
+                    #consequences = []
                     for st in gen.sub_tasks:
                         for cons in st.consequences:
-                            consequences.append(cons.description)
-                    self.update_graph_based_on_consequences(consequences, extracted_nodes)
+                            cons.set_update_query(self.generate_update_query_based_on_consequence(cons, extracted_nodes))
+                            #consequences.append(cons.description)
+                    #update_queries = self.update_graph_based_on_consequences(consequences, extracted_nodes)
 
                     self.__coco.coco_game(f"Here is your new quest:\nName: {gen.name}\nDesc: {gen.short_desc}\nSrc:  {gen.source}")
                     self.clear_triplets()
@@ -176,18 +182,33 @@ class Game:
                     self.__coco.coco_game(f'''You approach the task '{current_task.name}', which is described as '{current_task.description}'.''')
 
                     # do descriptive output of what is going to happen -> GPT
-                    self.__coco.coco_game("Some description to what will happen in the task...")
+                    opening_narration = self.narrate_quest(current_task.description)
+                    self.__coco.coco_game(opening_narration)
 
                     if len(current_task.dialogue_opts) > 0:
                         for task_opt_dict in current_task.dialogue_opts:
-                            npc = task_opt_dict["NPC"]
-                            dialogue = task_opt_dict["Text"]
-                            self.__coco.coco_dialogue(npc, dialogue)
+                            if isinstance(task_opt_dict, str):
+                                continue
+                            else:
+                                npc = task_opt_dict["NPC"]
+                                dialogue = task_opt_dict["Text"]
+                                self.__coco.coco_dialogue(npc, dialogue)
                     else:
                         self.__coco.coco_debug("There was no dialogue...")
 
-                    # do descriptive output of what happened (desc + cons), and that the task is now finished -> GPT
-                    self.__coco.coco_game("Some description to what happened in the task...")
+                    # description of what happened (desc + story + cons), and that the task is now finished -> GPT
+                    closing_narration = self.narrate_quest(current_task.description, current_task.consequences, opening_narration)
+                    self.__coco.coco_game(closing_narration)
+
+                    for cons in current_task.consequences:
+                        query = cons.get_update_query()
+                        self.__coco.coco_debug(f"Update query:\n{query}")
+                        try:
+                            self.__bg.update(query)
+                        except sparql.SPARQLQueryException:
+                            query = correct_query(query)
+                            self.__coco.coco_debug(f"Corrected query:\n{query}")
+                            self.__bg.update(query)
 
                     current_task.complete_task()  # should include update query performing
 
@@ -202,31 +223,31 @@ class Game:
             else:  # I don't know, add some type of random order (for this approach) or so I guess
                 self.__coco.coco_game("Quest is not chronological.")
 
-
-
     def handle_exploration(self):
         self.__coco.coco_game("You start exploring...")
+        exploration_reactions = []
         while True:
             next_action = self.__coco.coco_input("What do you want to do next?")
             if self.continue_exploring(next_action):
-                validation_output = self.validate_exploration(next_action)
+                validation_output = self.validate_exploration(next_action, exploration_reactions)
                 valid = validation_output.get("is_request_valid")
                 reaction = validation_output.get("action_reaction")
+                exploration_reactions.append(reaction)
                 explanation = validation_output.get("validity_explanation")
                 if valid:
                     self.update_graph_based_on_explor_actions(next_action, reaction, self.__last_queried_triplets)
                     self.clear_triplets()
                     self.__coco.coco_game(reaction)
-                    # updating generated quests ? How ?!
                 else:
                     self.__coco.coco_print(f"Your requested action can't be performed, see: {explanation}")
                     self.__coco.coco_game(reaction)
                 continue
             else:
+                exploration_reactions.clear()
                 self.__coco.coco_game("Finish exploring...")
                 break
 
-    def validate_exploration(self, exploration_request: str):
+    def validate_exploration(self, exploration_request: str, previous_reactions):
         extracted_nodes = self.get_graph_knowledge(exploration_request)
         self.__last_queried_triplets = extracted_nodes.copy()
 
@@ -261,10 +282,12 @@ class Game:
         performed without any issues.
         Here is the user's exploration request: "{exploration_request}".
         Here is the narrative used as a base for the game world: "{narrative.get_narrative()}"
-        Here are some graph node triplets that were queried based on the request: "{extracted_nodes}"'''
+        Here are some graph node triplets that were queried based on the request: "{extracted_nodes}"
+        Here are for additional context the previous reactions of the current exploration, basically describing what 
+        happened on the exploration before the current request: "{previous_reactions}"'''
 
         validation_msgs.append(Message(message, self.SYSTEM_ROLE))
-        response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check", 0.25)
+        response = self.__gpt_facade.make_function_call(validation_msgs, validity_function, "validity_check", 0.5)
 
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
 
@@ -287,19 +310,75 @@ class Game:
 
         select_msgs = []
         message = f'''Now select based on the given user answer which index should be chosen, here the answer: 
-        "{quest_selection}."
-        Before answering the user was provided with a list of strings, listing every available quest's name, description 
-        and an arbitrary number based on its position in the list. So the user's answer may include a reference to this 
-        number, the quest's name or the quest's description. Based on this included references select the associated 
-        number from the list and return it. The listing starts counting at 1, please keep this. Here is now the list 
-        with strings listing the quests: 
-        "{quest_enumeration}"'''
+                "{quest_selection}."
+                Before answering the user was provided with a list of strings, listing every available quest's name, description 
+                and an arbitrary number based on its position in the list. So the user's answer may include a reference to this 
+                number, the quest's name or the quest's description. Based on this included references select the associated 
+                number from the list and return it. The listing starts counting at 1, please keep this. Here is now the list 
+                with strings listing the quests: 
+                "{quest_enumeration}"'''
 
         select_msgs.append(Message(message, self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(select_msgs, select_function, "select_quest", 0.1)
         response_arguments = json.loads(response["choices"][0]["message"]["function_call"]["arguments"])
         index = response_arguments.get("index")
         return index
+
+    def narrate_quest(self, task_description: str, task_consequence: [] = [], prev_narration: str = ""):
+        self.__coco.coco_print("Generating task narration...")
+        narrate_function = [{
+            "name": "narrate_quest",
+            "description": "...",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "narration": {
+                        "type": "string",
+                        "description": "...",
+                    },
+                }, "required": ["narration"],
+            }
+        }]
+
+        narrate_msgs = []
+        profession = "You are now an expert in telling medieval stories and of what happens during quests."
+        genetive = ('''When generating text, prefer using the 'of' genitive form to indicate possession instead of the 
+                    's form. Avoid using the possessive 's.''')
+        backslash_n = '''And never use "\\n" for line breaks, since they cause errors in JSON.'''
+        if task_consequence == [] or prev_narration == "":
+            message = f'''{profession} To give the player some feeling of immersion the sub task of the quest, which is 
+            done completely automatic, should receive a narrative description of what is gonna happen, so that the whole 
+            run through feels more like a story. Base the narration, you should generate, on the following description 
+            of the task. Avoid using escape characters that are not valid for JSON. {genetive} {backslash_n} Here is the 
+            task's description of what needs to be done: "{task_description}"'''
+        else:
+            message = f'''{profession} To give the player a feeling of immersion, the sub task of the quest, which is 
+            done completely automatic, should also receive a narrative description of what has happened during the 
+            completion of the task, so that the ending feels more achieved and the sum of the events feel more like a 
+            story. Base the narration, you should generate, on the description of the task, the description of the 
+            task's consequences and the previous narration that opened the tasked in a narrative way. Avoid using escape 
+            characters that are not valid for JSON. {genetive} {backslash_n} Here is the task's description of what 
+            needs to be done: 
+            "{task_description}"
+            Here are the task's consequences:
+            "{task_consequence}"
+            And here is the previous narration:
+            "{prev_narration}"'''
+
+        narrate_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.make_function_call(narrate_msgs, narrate_function, "narrate_quest", 1.0)
+        narration_response = response["choices"][0]["message"]["function_call"]["arguments"]
+        while True:
+            try:
+                response_arguments = json.loads(narration_response)
+            except json.decoder.JSONDecodeError as jde:
+                self.__coco.coco_debug(f"Error-causing args: {narration_response}")
+                narration_response = self.correct_error(narration_response, jde, False)
+                self.__coco.coco_debug(f"Corrected args: {narration_response}")
+                continue
+            else:
+                task_narration = response_arguments.get("narration")
+                return task_narration
 
     def add_message(self, message: str, role: str = "user"):
         self.__messages.append(
@@ -567,31 +646,35 @@ WHERE {
         msgs = self.__messages.copy()
         msgs.append(Message(f"Take a deep breath and think about what should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}", self.USER_ROLE))
         msgs.append(Message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system"))
-        request_response = self.__gpt_facade.get_response(msgs, 1.0)  # self.get_response(1.0)
-        generated_quest = trim_quest_structure(request_response["choices"][0]["message"]["content"])
-        self.__coco.coco_debug(generated_quest)
-        #self.__quests.append(generated_quest)
+        request_response = self.__gpt_facade.get_response(msgs, 1.0)
+        untrimmed_quest = request_response["choices"][0]["message"]["content"]
+        self.__coco.coco_debug(untrimmed_quest)
+        generated_quest = trim_quest_structure(untrimmed_quest)
         return generated_quest
 
-    def correct_error(self, invalid_quest_structure: str, error_msg):
+    def correct_error(self, invalid_structure: str, error_msg, is_structure: bool = True):
         # do call with command of "repairing" structure
         try_count = 1
 
         while True:
             self.__coco.coco_debug(f"Correction {try_count}")
             try_count += 1
-
-            correction_msgs = self.__messages.copy()
-            correction_msgs.append(Message(
-                f'''In the generation of the quest structure an error occurred, see: "{error_msg}".
+            correction_msgs = []
+            if is_structure:
+                correction_msgs = self.__messages.copy()
+                message = f'''In the generation of the quest structure an error occurred, see: "{error_msg}".
                     Correct the following quest structure based on the already generated content, the originally 
                     given structure, the narrative and the queried nodes. Here is the incorrect structure:
-                    "{invalid_quest_structure}".
+                    "{invalid_structure}".
                     And here are the node triplets again: "{self.__last_queried_triplets}".
                     Additionally, check for more structural errors or missing keys and correct them.
-                    ''',
-                self.SYSTEM_ROLE
-            ))
+                    '''
+            else:
+                message = f'''In the following response an error occurred, see: "{error_msg}". 
+                    Correct the following error-causing response based on the provided error message. Here is the 
+                    error-causing response: {invalid_structure}'''
+
+            correction_msgs.append(Message(message, self.SYSTEM_ROLE))
             response = self.__gpt_facade.get_response(correction_msgs, 0.75)
             corrected_structure = trim_quest_structure(response["choices"][0]["message"]["content"])
 
@@ -668,6 +751,12 @@ WHERE {
             try:
                 q_sub_tasks = json_quest["SubTasks"]
                 for task in q_sub_tasks:
+                    name = task["Name"]
+                    description = task["Description"]
+                    t_type = task["Type"]
+                    npc = task["NPC"]
+                    location = task["Location"]
+                    dialogue_options = task["DialogueOptions"]
                     task_consequences = task["Task_Consequences"]
                     for des in task_consequences:
                         self.__coco.coco_debug(f"\nC.D: {des}")
@@ -701,8 +790,10 @@ WHERE {
         validation_msgs = self.__messages.copy()
 
         message = f'''Now only validate if the generated quest, as it is described in the generated structure, is 
-        consistent with the narrative and the queried graph node triplets. If some knowledge is provided only by the 
-        graph node triplets, assume it was just not mentioned in the narrative, and that it's therefore still valid. 
+        consistent with the the queried graph node triplets and the narrative. If some knowledge is provided only by the 
+        graph node triplets, assume it was simply not mentioned in the narrative, and that it's therefore still valid. 
+        For example if a character is only mentioned in a triplet, the quest should still be valid, because the graphs 
+        updated knowledge weights more than the hard coded and never updated narrative.
         Also make sure that it is logical and playable. Here is the generated quest again:\n{generated_quest_structure}
         And here are the queried graph node triplets again:\n{self.__last_queried_triplets}'''
 
@@ -782,9 +873,8 @@ WHERE {
         self.__consequences.append(new_cons)
         return new_cons
 
-    def update_graph_based_on_consequences(self, consequences, node_triplets):
+    def generate_update_query_based_on_consequence(self, consequence, node_triplets):
         update_graph_msgs = self.__messages.copy()
-        update_queries = []
         sparql_pattern = "DELETE {} INSERT {} WHERE {}"
         optional_block = "OPTIONAL {}"
 
@@ -797,49 +887,36 @@ WHERE {
             }''')
         predicates = reorder_query_triplets(predicates)
 
-        for cons in consequences:
-            message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
-            "{node_triplets}".\n
-            In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
-            graph. Your task is to craft only one single SparQL query, based on the given triplets, that logically 
-            updates the relevant triplets influenced by these consequences. Differentiate between changes that are 
-            essential for the graph and those that serve purely narrative purposes. Ensure that node deletion is minimal
-            , focusing on removing and changing only specific attributes when necessary. Note that the query is solely 
-            intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
-            Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
-            ones. Take a step back and think about every predicates true meaning, so you can apply them truthfully and 
-            don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
-            {predicates}
-            Here is the task consequence:
-            "{cons}".\n
-            When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
-            and please use the following pattern for the query:
-            "{sparql_pattern}".\n
-            You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
-            first time the triple is set.
-            Also, when generating the query, please use this prefixes:
-            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            PREFIX owl: <http://www.w3.org/2002/07/owl#>
-            PREFIX ex: <http://example.org/>
-            '''
+        message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
+        "{node_triplets}".\n
+        In our RPG game, task consequences outline changes to the game world, specifically to the underlying knowledge 
+        graph. Your task is to craft only one single SparQL query, based on the given triplets, that logically 
+        updates the relevant triplets influenced by these consequences. Differentiate between changes that are 
+        essential for the graph and those that serve purely narrative purposes. Ensure that node deletion is minimal
+        , focusing on removing and changing only specific attributes when necessary. Note that the query is solely 
+        intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
+        Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
+        ones. Take a step back and think about every predicates true meaning, so you can apply them truthfully and 
+        don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
+        {predicates}
+        Here is the task consequence:
+        "{consequence}".\n
+        When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
+        and please use the following pattern for the query:
+        "{sparql_pattern}".\n
+        You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
+        first time the triple is set.
+        Also, when generating the query, please use this prefixes:
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX ex: <http://example.org/>
+        '''
+        update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
+        response = self.__gpt_facade.get_response(update_graph_msgs)
+        update_query = correct_query(response["choices"][0]["message"]["content"])
 
-            update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
-            response = self.__gpt_facade.get_response(update_graph_msgs)
-            update_queries.append(correct_query(response["choices"][0]["message"]["content"]))
-            usage = response["usage"]
-            self.__coco.coco_debug(f"Token Info: \n{usage}")
-
-        self.__coco.coco_debug(f"Update Queries:")
-        i: int = 1
-        for upt_query in update_queries:
-            self.__coco.coco_debug(f"U.Q. {i}:\n{upt_query}")
-            try:
-                self.__bg.update(upt_query)
-            except sparql.SPARQLQueryException:
-                upt_query = correct_query(upt_query)
-                self.__bg.update(upt_query)
-            i += 1
+        return update_query
 
     def update_graph_based_on_explor_actions(self, action_request, system_reaction, node_triplets):
         update_graph_msgs = self.__messages.copy()
@@ -858,12 +935,12 @@ WHERE {
         message = f'''Here is a list of RDF triplets that were taken from a knowledge graph:
         "{node_triplets}".\n
         In our medieval RPG game, players can freely explore the game world beyond structured quests. During these 
-        explorations, they can take actions that potentially alter the state of the game world and its underlying 
-        knowledge graph. Your challenge is to craft a single SparQL query, using the provided triplets, to logically 
-        update relevant triplets impacted by the player's actions. Distinguish between changes essential to the graph 
-        and those that are minor or inconsequential. When a player creates something new, like a cabin, or when an 
-        object or resource, which should naturally exist in the game world based on the setting, is mentioned, you may 
-        add a new node to the graph, including all necessary attributes.
+        explorations, they can change location and take actions that potentially alter the state of the game world and 
+        its underlying knowledge graph. Your challenge is to craft a single SparQL query, using the provided triplets, 
+        to logically update relevant triplets impacted by the player's actions. Distinguish between changes essential to 
+        the graph and those that are minor or inconsequential. When a player creates something new, like a cabin, or 
+        when an object or resource, which should naturally exist in the game world based on the setting, is mentioned, 
+        you may add a new node to the graph, including all necessary attributes.
         Emphasize minimal node deletion, with a focus on altering or removing specific attributes when necessary. This 
         query is exclusively for graph updates and does not involve condition checking or complete node deletions. 
         Prioritize the use of existing predicates over introducing new ones. Ensure a thoughtful approach to the meaning 
