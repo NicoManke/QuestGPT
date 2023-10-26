@@ -23,12 +23,18 @@ class SubTask:
 class Consequence:
     def __init__(self, description: str, update_query: str = ""):
         self.description = description
-        self.update_query = update_query
+        self.__update_query = update_query
+
+    def set_update_query(self, update_query: str):
+        self.__update_query = update_query
+
+    def get_update_query(self):
+        return self.__update_query
 
     def resolve(self):
         # here should happen way more complex stuff
         print(self.description)
-        print(self.update_query)
+        print(self.__update_query)
 
 
 class DialogueOptions:
