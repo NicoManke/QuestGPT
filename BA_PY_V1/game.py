@@ -23,6 +23,7 @@ class Game:
         self.__node_messages = []
         self.__messages = []
         self.__quests = []
+        self.__quest_structures = []
         self.__completed_quests = []
         self.__consequences = []
         self.__last_queried_triplets = []
@@ -643,9 +644,23 @@ WHERE {
         return queries
 
     def generate_quest(self, quest_request: str, extracted_nodes):
+        listed_quests = ""
+        for q in self.__quests:
+            listed_quests = f"{listed_quests}{q.to_str()}, "
+
         msgs = self.__messages.copy()
-        msgs.append(Message(f"Take a deep breath and think about what should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}", self.USER_ROLE))
-        msgs.append(Message(f"Generate a quest for the following player request, using only the given structure:\n{quest_request}", "system"))
+        msgs.append(Message(
+            f"Take a deep breath and think about what should be part of a good rpg quest, then build the quest's story around a few of those given graph nodes extracted from the knowledge graph: {extracted_nodes}",
+            self.USER_ROLE))
+        msgs.append(Message(
+            f"Here is a list of previously generated quests, avoid redundancies between the old quests and the newly generated one, so that the player won't get the same objective or even quest twice:\n{listed_quests}",
+            self.USER_ROLE))
+        msgs.append(Message(
+            f"Generate a quest for the following player request, using only the given structure:\n{quest_request}",
+            self.USER_ROLE))
+
+        self.__coco.coco_debug(f"Test - quest list: {listed_quests}")
+
         request_response = self.__gpt_facade.get_response(msgs, 1.0)
         untrimmed_quest = request_response["choices"][0]["message"]["content"]
         self.__coco.coco_debug(untrimmed_quest)
@@ -865,7 +880,7 @@ WHERE {
             )
             sub_tasks.append(new_sub_task)
 
-        new_quest = quest.Quest(q_name, q_description, q_s_description, q_source, q_chrono, sub_tasks)
+        new_quest = quest.Quest(q_name, q_description, q_s_description, q_source, q_chrono, sub_tasks, generated_structure)
         return new_quest
 
     def create_consequence(self, description: str):
