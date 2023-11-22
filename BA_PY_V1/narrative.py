@@ -17,6 +17,6 @@ of speaking due to his limited education. Recently, one of his fields in the nor
 most of his fields were spared, Tom is very upset. He now fears that Smaug may target his remaining northern fields as 
 well. Markus is a skilled craftsman capable of repairing various objects and structures. Perhaps Markus could repair the 
 rickety old bridge in the Blue Mountains. Finally, there is Mayor Hector, who is a plump and slow-moving fellow but by 
-no means mentally slow. Hector is clever and a good leader of the village of Birk. He interacts frequently with the 
+no means mentally slow. Hector is clever and a good leader of the village of Eich. He interacts frequently with the 
 villagers and is responsible for assigning new quests, even if they arise at the request of the citizens.
 '''
