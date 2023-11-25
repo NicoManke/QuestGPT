@@ -38,3 +38,8 @@ class BlazeGraph:
 # 'D:/Bachelor/Blazegraph/files/Eich-created.ttl'
 # 'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
 # self.server.update('LOAD <file:///D:/Bachelor/Blazegraph/files/Eich-Created.ttl>')
+
+# this_dir = os.path.dirname(os.path.abspath(__file__))
+# file_path = os.path.join(this_dir, "Eich-created.ttl")
+# file_path = file_path.replace('\\', '/')#
+# file_path = os.getenv("Graph_File")

@@ -3,8 +3,6 @@ import game
 
 
 def main():
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(this_dir, "Eich-created.ttl")
 
     game_instance = game.Game(
         os.getenv("OPENAI_API_KEY"),
@@ -12,7 +10,7 @@ def main():
         12,
         10,
         os.getenv("Blazegraph_Address"),
-        file_path
+        os.getenv("Graph_File")
     )
 
     game_instance.run()
