@@ -8,7 +8,8 @@ def main():
         "gpt-4",
         12,
         10,
-        'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
+        os.getenv("Blazegraph_Address")
+        #'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
     )
 
     game_instance.run()
