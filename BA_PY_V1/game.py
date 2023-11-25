@@ -21,7 +21,7 @@ import instructions
 
 
 class Game:
-    def __init__(self, api_key, api_model, max_request_tries, waiting_time, server_address):
+    def __init__(self, api_key, api_model, max_request_tries, waiting_time, server_address, server_file):
         self.__node_messages = []
         self.__messages = []
         self.__quests = []
@@ -37,7 +37,8 @@ class Game:
         self.__gpt_facade = openai_facade.OpenAIFacade(api_key, api_model, max_request_tries, waiting_time=waiting_time)
 
         self.__server_address = server_address
-        self.__bg = blazegraph.BlazeGraph(self.__server_address)
+        self.__server_file = server_file
+        self.__bg = blazegraph.BlazeGraph(self.__server_address, self.__server_file)
 
         # node graph node types here; currently just selected examples
         self.__node_types = '''
