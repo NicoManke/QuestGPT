@@ -11,10 +11,11 @@ class SubTask:
         self.complete = False
 
     def __str__(self):
-        return self.to_str()
+        return self.st_to_str()
 
-    def to_str(self):
-        dialogue_options_str = "\n".join([f"Dialogue_Option: {opt.id},\nNPC: {opt.npc},\nDialogue: {opt.dialogue}" for opt in self.dialogue_opts])
+    def st_to_str(self):
+        dialogue_options_str = "\n".join([f"Dialogue_Option: {opt['DialogueID']},\nNPC: {opt['NPC']},\nDialogue: {opt['Text']}" for opt in self.dialogue_opts])
+        #dialogue_options_str = "\n".join([f"Dialogue_Option: {opt.id},\nNPC: {opt.npc},\nDialogue: {opt.dialogue}" for opt in self.dialogue_opts])
         consequences_str = "\n".join([cons.description for cons in self.consequences])
 
         return "{" + f"Name: {self.name}\nDescription: {self.description}\nType: {self.type}\nNPC: {self.npc}\nLocation: {self.location}\n" \

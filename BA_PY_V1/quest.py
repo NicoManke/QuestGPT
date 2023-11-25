@@ -20,7 +20,7 @@ class Quest:
     def to_str(self):
         sub_tasks_str = ""
         for st in self.sub_tasks:
-            sub_tasks_str = f"{sub_tasks_str}{st.to_str()}, "
+            sub_tasks_str = f"{sub_tasks_str}{st.st_to_str()}, "
         as_string = "{ " + f"Name: {self.name}, Description: {self.description}, Source: {self.source}, Sub Tasks: [{sub_tasks_str}]" + " }"
         return as_string
 

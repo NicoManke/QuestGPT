@@ -651,7 +651,7 @@ WHERE {
     def generate_quest(self, quest_request: str, extracted_nodes):
         listed_quests = ""
         for q in self.__quests:
-            listed_quests = f"{listed_quests}{q.to_str()}, "
+            listed_quests = f"{listed_quests}{q.to_string()}, "
 
         msgs = self.__messages.copy()
         msgs.append(Message(
