@@ -625,12 +625,17 @@ VALUES (?node) {(ex:Stranger)}
         self.__coco.coco_debug(f"Args (deeper nodes): {function_args}")
 
         try:
-            required_nodes_list = function_args.get("required_nodes").split(', ')
+            required_nodes_list = function_args.get("required_nodes").split(',')
+            new_rn_list = []
+            for rn in required_nodes_list:
+                new_rn_list.append(rn.replace(' ', ''))
+            required_nodes_list = new_rn_list
         except AttributeError as ae:
             self.__coco.coco_debug(f"List error at \"required_nodes\": {ae}")
             required_nodes_list = function_args.get("required_nodes")
         queries = []
         for node in required_nodes_list:
+            node = node.replace(' ', '')
             query = '''PREFIX ex: <http://example.org/>
 
 SELECT ?subject ?property ?value
@@ -889,7 +894,8 @@ WHERE {
         return new_cons
 
     def generate_update_query_based_on_consequence(self, consequence, node_triplets):
-        update_graph_msgs = self.__messages.copy()
+        # update_graph_msgs = self.__messages.copy()
+        update_graph_msgs = []
         sparql_pattern = "DELETE {} INSERT {} WHERE {}"
         optional_block = "OPTIONAL {}"
 
@@ -911,17 +917,18 @@ WHERE {
         , focusing on removing and changing only specific attributes when necessary. Note that the query is solely 
         intended for graph updates and does not require condition checking. Refrain from deleting entire nodes. 
         Emphasize the importance of respecting and opting for pre-existing predicates instead of introducing new 
-        ones. Take a step back and think about every predicates true meaning, so you can apply them truthfully and 
+        ones. Take a step back and think about every predicate's true meaning, so you can apply them truthfully and 
         don't accidentally create a redundant predicate. Below is a comprehensive list of the available predicates:
         {predicates}
         Here is the task consequence:
         "{consequence}".\n
         When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
-        and please use the following pattern for the query:
+        and please base the new query on the following pattern:
         "{sparql_pattern}".\n
-        You may use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the 
-        first time the triple is set.
-        Also, when generating the query, please use this prefixes:
+        Use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the first time 
+        the triple is set. Always write out triplets completely, even if they share the same subject, and remember to 
+        place the finishing '.' at the end of each triplet. And if there is nothing to update, please return a query 
+        with empty brackets, following the provided pattern. Also, when generating the query, always use these prefixes:
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -930,6 +937,8 @@ WHERE {
         update_graph_msgs.append(Message(message, self.SYSTEM_ROLE))
         response = self.__gpt_facade.get_response(update_graph_msgs)
         update_query = correct_query(response["choices"][0]["message"]["content"])
+
+        self.__coco.coco_debug(update_query)
 
         return update_query
 
@@ -971,12 +980,12 @@ WHERE {
         "{system_reaction}".
         This description may help defining what actually happens in the world, not only what the player requested to do.
         When generating the query, only return the code of the query, nothing else, so no additional descriptions, 
-        and please use the following pattern for the query:
+        and please base the new query on the following pattern:
         "{sparql_pattern}".
         Use {optional_block} inside the WHERE block if a WHERE check is really necessary, but it could be the first time 
         the triple is set. Always write out triplets completely, even if they share the same subject, and remember to 
-        place the finishing '.' at the end of each triplet. And if there is nothing to update, please return an query 
-        with empty brackets, following the provided pattern. Also, when generating the query, always use this prefixes:
+        place the finishing '.' at the end of each triplet. And if there is nothing to update, please return a query 
+        with empty brackets, following the provided pattern. Also, when generating the query, always use these prefixes:
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
