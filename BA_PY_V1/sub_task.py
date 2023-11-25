@@ -10,13 +10,21 @@ class SubTask:
         # non structural stuff
         self.complete = False
 
+    def __str__(self):
+        return self.to_str()
+
+    def to_str(self):
+        dialogue_options_str = "\n".join([f"Dialogue_Option: {opt.id},\nNPC: {opt.npc},\nDialogue: {opt.dialogue}" for opt in self.dialogue_opts])
+        consequences_str = "\n".join([cons.description for cons in self.consequences])
+
+        return "{" + f"Name: {self.name}\nDescription: {self.description}\nType: {self.type}\nNPC: {self.npc}\nLocation: {self.location}\n" \
+               f"Dialogue Options:\n{dialogue_options_str}\nConsequences:\n{consequences_str}" + "}"
+
     def complete_task(self):
         self.complete = True
-        #self.resolve_consequences()
 
     def resolve_consequences(self):
         for cons in self.consequences:
-            # need to implement consequences first
             cons.resolve()
 
 
