@@ -67,3 +67,7 @@ def trim_triplets(triplet_part: str):
     triplet_part = triplet_part.replace("http://www.w3.org/2000/01/rdf-schema#", "")
     triplet_part = triplet_part.replace("http://www.w3.org/2002/07/owl#", "")
     return triplet_part
+
+
+def remove_line_breaks(text: str):
+    return text.replace('\n', ' ')
