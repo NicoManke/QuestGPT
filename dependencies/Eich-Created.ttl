@@ -1,0 +1,246 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix schema: <https://schema.org/> .
+@prefix ex: <http://example.org/> .
+
+# Define your custom classes
+ex:Player a rdfs:Class .
+
+ex:NPC a rdfs:Class .
+
+ex:Human a rdfs:Class ;
+  rdfs:subClassOf ex:NPC .
+
+ex:Dragon a rdfs:Class ;
+  rdfs:subClassOf ex:NPC .
+
+ex:Wolf a rdfs:Class ;
+  rdfs:subClassOf ex:NPC .
+  
+ex:WorldLocation a rdfs:Class .
+
+ex:Item a rdfs:Class .
+
+ex:Weapon a rdfs:Class ;
+  rdfs:subClassOf ex:Item .
+
+ex:Sword a rdfs:Class ;
+  rdfs:subClassOf ex:Weapon .
+
+ex:WarHammer a rdfs:Class ;
+  rdfs:subClassOf ex:Weapon .
+
+ex:Apparel a rdfs:Class ;
+  rdfs:subClassOf ex:Item .
+  
+ex:WorldObject a rdfs:Class .
+
+ex:Treasure a rdfs:Class ;
+  rdfs:subClassOf ex:WorldObject .
+  
+ex:WorldResource a rdfs:Class .
+
+# Player instance
+ex:Stranger a ex:Player .
+  
+# Define the NPCs and WorldLocations using your custom classes
+ex:Siegfried a ex:Human ;
+    ex:isAlive true ;
+    ex:canChangeWorldLocation true ;
+    ex:canBeKilled true ;
+    ex:isLocatedIn ex:Eich ;
+    ex:knows ex:Hektor, ex:Markus, ex:Tom, ex:Smaug, ex:Baldur , ex:BigBadWolf ;
+    ex:isQuestGiver true ;
+    ex:title "Dragon Slayer" ;
+	ex:hasItem ex:DragonSlayerSword .
+
+ex:Hektor a ex:Human ;
+    ex:isAlive true ;
+    ex:canChangeWorldLocation false ;
+    ex:canBeKilled false ;
+    ex:isLocatedIn ex:Eich ;
+    ex:knows ex:Siegfried, ex:Markus, ex:Tom, ex:Sven, ex:Smaug , ex:Lindwurm , ex:BigBadWolf ;
+    ex:isQuestGiver true ;
+    ex:title "Mayor" .
+
+ex:Markus a ex:Human ;
+    ex:isAlive true ;
+    ex:canChangeWorldLocation false ;
+    ex:canBeKilled false ;
+    ex:isLocatedIn ex:Eich ;
+    ex:knows ex:Siegfried, ex:Hektor, ex:Tom, ex:Sven, ex:Smaug , ex:Lindwurm , ex:BigBadWolf ;
+    ex:title "Craftsman" .
+
+ex:Tom a ex:Human ;
+    ex:isAlive true ;
+    ex:canChangeWorldLocation true ;
+    ex:canBeKilled false ;
+    ex:isLocatedIn ex:Eich ;
+    ex:knows ex:Siegfried, ex:Markus, ex:Hektor, ex:Sven, ex:Smaug , ex:Lindwurm , ex:BigBadWolf ;
+    ex:title "Farmer" .
+
+ex:Sven a ex:Human ;
+    ex:isAlive false ;
+    ex:canChangeWorldLocation false ;
+    ex:canBeKilled false ;
+    ex:isLocatedIn ex:GreenMeadows ;
+	ex:wasKilledBy ex:BigBadWolf .
+
+ex:Smaug a ex:Dragon ;
+    ex:isAlive true ;
+    ex:canBeKilled true ;
+    ex:canChangeWorldLocation false ;
+    ex:isLocatedIn ex:BlueMountains ;
+	ex:isLocatedIn ex:DwarfMountain ;
+	ex:hasItem ex:DwarfCrown .
+
+ex:Baldur a ex:Dragon ;
+    ex:canBeKilled true ;
+    ex:isAlive true ;
+    ex:canChangeWorldLocation false ;
+    ex:isLocatedIn ex:RedMountains .
+
+ex:Lindwurm a ex:Dragon ;
+    ex:isAlive false ;
+    ex:isLocatedIn ex:GreenMeadows ;
+	ex:wasKilledBy ex:BigBadWolf .
+
+ex:BigBadWolf a ex:Wolf ;
+    ex:canBeKilled true ;
+    ex:isAlive true ;
+    ex:canChangeWorldLocation false ;
+    ex:isLocatedIn ex:GreenMeadows ;
+	ex:description "A wolf as big a the biggest stallions" .
+
+# Define the WorldLocations using your custom class
+ex:Eich a ex:WorldLocation ;
+    rdfs:label "Village Eich" .
+
+ex:RedMountains a ex:WorldLocation ;
+    rdfs:label "Red Mountains" .
+
+ex:BlueMountains a ex:WorldLocation ;
+    rdfs:label "Blue Mountains" .
+
+ex:GreenMeadows a ex:WorldLocation ;
+    rdfs:label "Green Meadows" ;
+	ex:inhabitedBy "thousands of free-roaming horses, cattle, pigs, and sheep" .
+
+ex:BlueMountainsPath a ex:WorldLocation ;
+    rdfs:label "Blue Mountains Path" .
+
+ex:BanditCamp a ex:WorldLocation ;
+    rdfs:label "Bandit Camp" ;
+	ex:hasState ex:IntactState.
+
+ex:OldBridge a ex:WorldLocation ;
+    rdfs:label "Old Bridge" ;
+	ex:hasState ex:DamagedState .
+
+ex:DwarfMountain a ex:WorldLocation ;
+    rdfs:label "Dwarf Mountain" ;
+	ex:hasState ex:IntactState .
+
+ex:FarmersFields a ex:WorldLocation ;
+    rdfs:label "Farmers' Fields" ;
+	ex:hasState ex:DamagedState .
+
+ex:Orchards a ex:WorldLocation ;
+    rdfs:label "Orchards" ;
+	ex:hasState ex:IntactState .
+
+ex:EastOfEich a ex:WorldLocation ;
+    rdfs:label "East of Eich" .
+
+ex:SecretDungeon a ex:WorldLocation ;
+    rdfs:label "Secret Dungeon" .
+
+# Add relationships between WorldLocations
+ex:Eich ex:hasWorldLocation ex:FarmersFields .
+ex:FarmersFields ex:isLocatedIn ex:Eich .
+
+ex:Eich ex:hasWorldLocation ex:Orchards .
+ex:Orchards ex:isLocatedIn ex:Eich .
+
+ex:BlueMountains ex:hasWorldLocation ex:BlueMountainsPath .
+ex:BlueMountainsPath ex:isLocatedIn ex:BlueMountains .
+
+ex:BlueMountains ex:hasWorldLocation ex:BanditCamp .
+ex:BanditCamp ex:isLocatedIn ex:BlueMountains .
+
+ex:BlueMountains ex:hasWorldLocation ex:DwarfMountain .
+ex:DwarfMountain ex:isLocatedIn ex:BlueMountains .
+
+ex:BanditCamp ex:hasWorldLocation ex:SecretDungeon .
+ex:SecretDungeon ex:isLocatedIn ex:BanditCamp .
+
+ex:BlueMountainsPath ex:leadsTo ex:BanditCamp .
+ex:BlueMountainsPath ex:leadsTo ex:OldBridge .
+ex:OldBridge ex:leadsTo ex:DwarfMountain .
+
+# Add states for buildings
+# Define a property to describe the current state of a building
+ex:hasState a owl:ObjectProperty ;
+    rdfs:domain ex:WorldLocation ;
+    rdfs:range ex:BuildingState ;
+    rdfs:label "hasState" .
+
+# Define classes for the possible states of a building
+ex:BuildingState a rdfs:Class .
+
+ex:IntactState a ex:BuildingState ;
+    rdfs:label "Intact" .
+
+ex:DamagedState a ex:BuildingState ;
+    rdfs:label "Damaged" .
+
+ex:DestroyedState a ex:BuildingState ;
+    rdfs:label "Destroyed" .
+	
+# add more stuff to fill the world
+ex:DragonSlayerSword a ex:Sword ;
+    rdfs:label "DragonSlayerSword" ;
+	ex:isPossessedBy ex:Siegfried .
+	
+ex:EichBlade a ex:Sword ;
+    rdfs:label "EichBlade" ;
+	ex:isPossessedBy ex:Hektor .
+	
+ex:SkullCrusher a ex:WarHammer ;
+    rdfs:label "SkullCrusher" ;
+	ex:isPartOf ex:DwarfTreasure .
+	
+ex:Bonker a ex:WarHammer ;
+    rdfs:label "Bonker" ;
+	ex:isPartOf ex:DungeonTreasure .
+	
+ex:DwarfCrown a ex:Apparel ;
+    rdfs:label "DwarfCrown" ;
+	ex:isPossessedBy ex:Smaug .
+	
+ex:DwarfTreasure a ex:Treasure ;
+    rdfs:label "DwarfTreasure" ;
+	ex:isLocatedIn ex:DwarfMountain .
+	
+ex:DungeonTreasure a ex:Treasure ;
+    rdfs:label "DungeonTreasure" ;
+	ex:isLocatedIn ex:Dungeon .
+	
+ex:EichFunds a ex:Treasure ;
+	ex:isLocatedIn ex:Eich .
+
+ex:DragonMeat a ex:WorldResource ;
+	ex:isObtainedFrom ex:Dragon.
+ex:DragonBlood a ex:WorldResource ;
+	ex:isObtainedFrom ex:Dragon.
+ex:WolfMeat a ex:WorldResource ;
+	ex:isObtainedFrom ex:Wolf.
+ex:WolfFur a ex:WorldResource ;
+	ex:isObtainedFrom ex:Wolf.
+ex:Gold a ex:WorldResource ;
+	ex:isObtainedFrom ex:Treasure.
+ex:Apples a ex:WorldResource ;
+	ex:isObtainedFrom ex:Orchards.
+ex:Wheat a ex:WorldResource ;
+	ex:isObtainedFrom ex:FarmersFields.
