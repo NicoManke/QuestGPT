@@ -21,6 +21,8 @@ def correct_query(query_request: str):
 
     if start_index == -1:
         start_index = query_request.upper().find("SELECT")
+        if start_index == -1:  # is update query (which don't have a 'SELECT')
+            start_index = query_request.upper().find("DELETE")
         trimmed_output = query_request[start_index:end_index + 1]
         prefixes = '''
 # fixed by code 
@@ -65,3 +67,7 @@ def trim_triplets(triplet_part: str):
     triplet_part = triplet_part.replace("http://www.w3.org/2000/01/rdf-schema#", "")
     triplet_part = triplet_part.replace("http://www.w3.org/2002/07/owl#", "")
     return triplet_part
+
+
+def remove_line_breaks(text: str):
+    return text.replace('\n', ' ')

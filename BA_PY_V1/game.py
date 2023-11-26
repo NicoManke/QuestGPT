@@ -7,6 +7,8 @@ import sub_task
 import blazegraph
 import color_console
 from pymantic import sparql
+
+from utility import remove_line_breaks
 from utility import create_message as Message
 from utility import trim_quest_structure
 from utility import reorder_query_triplets
@@ -19,7 +21,7 @@ import instructions
 
 
 class Game:
-    def __init__(self, api_key, api_model, max_request_tries, waiting_time, server_address):
+    def __init__(self, api_key, api_model, max_request_tries, waiting_time, server_address, server_file):
         self.__node_messages = []
         self.__messages = []
         self.__quests = []
@@ -35,7 +37,8 @@ class Game:
         self.__gpt_facade = openai_facade.OpenAIFacade(api_key, api_model, max_request_tries, waiting_time=waiting_time)
 
         self.__server_address = server_address
-        self.__bg = blazegraph.BlazeGraph(self.__server_address)
+        self.__server_file = server_file
+        self.__bg = blazegraph.BlazeGraph(self.__server_address, self.__server_file)
 
         # node graph node types here; currently just selected examples
         self.__node_types = '''
@@ -369,11 +372,12 @@ class Game:
         narrate_msgs.append(Message(message, self.SYSTEM_ROLE))
         response = self.__gpt_facade.make_function_call(narrate_msgs, narrate_function, "narrate_quest", 1.0)
         narration_response = response["choices"][0]["message"]["function_call"]["arguments"]
+        narration_response = remove_line_breaks(narration_response)
         while True:
             try:
                 response_arguments = json.loads(narration_response)
             except json.decoder.JSONDecodeError as jde:
-                self.__coco.coco_debug(f"Error-causing args: {narration_response}")
+                self.__coco.coco_debug(f"Error-causing args: {narration_response},\n Error: {jde}")
                 narration_response = self.correct_error(narration_response, jde, False)
                 self.__coco.coco_debug(f"Corrected args: {narration_response}")
                 continue
@@ -651,7 +655,7 @@ WHERE {
     def generate_quest(self, quest_request: str, extracted_nodes):
         listed_quests = ""
         for q in self.__quests:
-            listed_quests = f"{listed_quests}{q.to_str()}, "
+            listed_quests = f"{listed_quests}{q.to_string()}, "
 
         msgs = self.__messages.copy()
         msgs.append(Message(

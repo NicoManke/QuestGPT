@@ -3,12 +3,14 @@ import game
 
 
 def main():
+
     game_instance = game.Game(
         os.getenv("OPENAI_API_KEY"),
         "gpt-4",
         12,
         10,
-        'http://192.168.2.100:9999/blazegraph/namespace/kb/sparql'
+        os.getenv("Blazegraph_Address"),
+        os.getenv("Graph_File")
     )
 
     game_instance.run()
