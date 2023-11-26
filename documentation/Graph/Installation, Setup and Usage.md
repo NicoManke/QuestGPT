@@ -1,7 +1,8 @@
 # Blazegraph Installation
 Here are the most important sources for installing Blazegraph on your machine:
-- Quickstart for Blazegraph (https://github.com/blazegraph/database/wiki/Quick_Start)
-- Using Blazegraph in Python (https://github.com/blazegraph/blazegraph-python) 
+- Installation Guide (including Java info): https://github.com/blazegraph/database/wiki/Installation_guide
+- Quickstart for Blazegraph: https://github.com/blazegraph/database/wiki/Quick_Start
+- Using Blazegraph in Python: https://github.com/blazegraph/blazegraph-python 
 - If you have already completed the "Installation, Setup and Usage" guide for the python code project, then you should not be required to do any more actions in terms of using Blazegraph and Python together, because every necessary package should already be installed.
 
 For more information see also:
