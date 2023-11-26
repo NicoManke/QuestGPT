@@ -47,7 +47,8 @@ RepositoryRoot/
     ├── dependencies/
     │   └── Eich-Created.ttl // the file containing all RDF triplets used for filling the knowledge graph
     ├── distributable/
-    │   └── QuestGPT.exe // the executable file for running the game in a simple console after installing blazegraph and starting the graph server
+    │   ├── QuestGPT.exe // the executable file for running the game in a simple console after installing blazegraph and starting the graph server
+    │   └── start-blazegraph-server.bat // a bat file for running the command that starts the Blazegraph server
     └── documentation/      
         ├── Graph/  
         │   └── Installation, Setup and Usage.md // instructions and important links to follow for installing Blazegraph
